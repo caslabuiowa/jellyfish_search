@@ -30,7 +30,7 @@ if len(logger.handlers) < 1:
     logger.addHandler(stream_handler)
 
 
-def generate_lqr_trajectories(x0, goal, Q_std, R_std, x0_std, tf, n=5, rng=None):
+def generate_lqr_trajectory(x0, goal, Q_std, R_std, x0_std, tf, n=5, rng=None):
     if rng is None:
         rng = default_rng()
 
@@ -69,12 +69,10 @@ def initialize_lqr_problem(Q_std, R_std, rng):
                   [0, 0],
                   [0, 1]], dtype=float)
 
-    # Q = rng.normal(0, Q_std, (8, 8))
-    # R = rng.normal(0, R_std, (2, 2))
-    # Q = (0.5*Q.T@Q).round(6)
-    # R = (0.5*R.T@R).round(6)
-    Q = np.eye(8)
-    R = np.eye(2)
+    Q = rng.normal(0, Q_std, (8, 8))
+    R = rng.normal(0, R_std, (2, 2))
+    Q = (0.5*Q.T@Q).round(6)
+    R = (0.5*R.T@R).round(6)
 
     return A, B, Q, R
 
@@ -82,9 +80,12 @@ def initialize_lqr_problem(Q_std, R_std, rng):
 def perturb_initial_state(x0, goal, std, rng):
     x0_perturbed = x0.copy()
     # Subtract goal because the LQR controller tries to bring all states back to zero
-    x0_perturbed += rng.normal([-goal[0], 0, 0, 0,
-                                -goal[1], 0, 0, 0],
-                               std)
+    # Only perturb the position since we want to keep the higher order derivatives of the initial state constant
+    # x0_perturbed += rng.normal([-goal[0], 0, 0, 0,
+    #                             -goal[1], 0, 0, 0],
+    #                            std)
+    x0_perturbed[0] += rng.normal(-goal[0], std)
+    x0_perturbed[4] += rng.normal(-goal[1])
 
     return x0_perturbed
 
@@ -94,12 +95,10 @@ def solve_lqr_problem(A, B, Q, R, x0, n, tf, goal):
 
     usol, success = lsoda(fn.address, x0, np.linspace(0, tf, n+1), data=(A - B@K))
 
-    # cpts = np.concatenate([[usol.T[:, 0] - usol.T[0, 0] + initial_position[0]],
-    #                        [usol.T[:, 4] - usol.T[0, 4] + initial_position[1]]], axis=0)
     logger.debug(f'{usol=}')
     cpts = np.concatenate([[usol[:, 0]],
                            [usol[:, 4]]], axis=0)
-    cpts += goal[:, np.newaxis]
+    cpts -= cpts[:, 0, np.newaxis]
     logger.debug(f'{cpts=}')
     traj = Bernstein(cpts, tf=tf)
 
@@ -372,8 +371,9 @@ def fn(t, u, du, p):
 
 if __name__ == '__main__':
     seed = 3
+    rng = default_rng(seed)
 
-    n = 20
+    n = 7
     t0 = 0
     tf = 10
     dt = 1
@@ -381,7 +381,7 @@ if __name__ == '__main__':
     t_max = 0.95
     Q_std = 1#10
     R_std = 1#300
-    x0_std = 0
+    x0_std = 1
 
     safe_planning_radius = 10
     safe_dist = 2
@@ -398,7 +398,7 @@ if __name__ == '__main__':
 
     goal = np.array([100, 0], dtype=float)
     initial_position = np.array([0, 0], dtype=float)
-    initial_velocity = np.array([0, 1], dtype=float)
+    initial_velocity = np.array([0, 0], dtype=float)
     initial_acceleration = np.array([0, 0], dtype=float)
     x0 = np.concatenate([[initial_position],
                          [initial_velocity],
@@ -413,28 +413,6 @@ if __name__ == '__main__':
 
     # jfc = JellyfishController(n, ndim, tf, obstacles, safe_dist, vmax, wmax, safe_planning_radius, t_max)
     # jfc.start(initial_position, initial_velocity, initial_acceleration, goal, dt)
-    traj = generate_lqr_trajectories(x0, goal, Q_std, R_std, x0_std, tf, n=n)
+    traj = generate_lqr_trajectory(x0, goal, Q_std, R_std, x0_std, tf, n=n, rng=rng)
     plt.close('all')
     traj.plot()
-
-    ### For debugging only
-    # rng = default_rng(seed)
-    # A = np.array([[0, 1, 0, 0, 0, 0, 0, 0],
-    #               [0, 0, 1, 0, 0, 0, 0, 0],
-    #               [0, 0, 0, 1, 0, 0, 0, 0],
-    #               [0, 0, 0, 0, 0, 0, 0, 0],
-    #               [0, 0, 0, 0, 0, 1, 0, 0],
-    #               [0, 0, 0, 0, 0, 0, 1, 0],
-    #               [0, 0, 0, 0, 0, 0, 0, 1],
-    #               [0, 0, 0, 0, 0, 0, 0, 0]], dtype=float)
-    # B = np.array([[0, 0],
-    #               [0, 0],
-    #               [0, 0],
-    #               [1, 0],
-    #               [0, 0],
-    #               [0, 0],
-    #               [0, 0],
-    #               [0, 1]], dtype=float)
-
-    # Q = rng.normal(0, Q_std, (8, 8))
-    # R = rng.normal(0, R_std, (2, 2))
