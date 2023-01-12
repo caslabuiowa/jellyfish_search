@@ -14,6 +14,7 @@ from numba import cfunc, carray
 from numbalsoda import lsoda_sig, lsoda
 import numpy as np
 from numpy.random import default_rng
+from scipy.linalg import eig
 
 from polynomial.bernstein import Bernstein
 # from stoch_opt.constraint_functions import CollisionAvoidance, MaximumSpeed, MaximumAngularRate, SafeSphere
@@ -21,7 +22,7 @@ from polynomial.bernstein import Bernstein
 # from stoch_opt.utils import state2cpts
 
 
-LOG_LEVEL = logging.DEBUG
+LOG_LEVEL = logging.WARN
 logger = logging.getLogger(__name__)
 logger.setLevel(LOG_LEVEL)
 if len(logger.handlers) < 1:
@@ -74,6 +75,11 @@ def initialize_lqr_problem(Q_std, R_std, rng):
     Q = (0.5*Q.T@Q).round(6)
     R = (0.5*R.T@R).round(6)
 
+    # w, v = eig(Q)
+    # Q = np.diag(w)
+    # w, v = eig(R)
+    # R = np.diag(w)
+
     return A, B, Q, R
 
 
@@ -84,8 +90,8 @@ def perturb_initial_state(x0, goal, std, rng):
     # x0_perturbed += rng.normal([-goal[0], 0, 0, 0,
     #                             -goal[1], 0, 0, 0],
     #                            std)
-    x0_perturbed[0] += rng.normal(-goal[0], std)
-    x0_perturbed[4] += rng.normal(-goal[1])
+    x0_perturbed[0] -= rng.normal(goal[0], std)
+    x0_perturbed[4] -= rng.normal(goal[1])
 
     return x0_perturbed
 
@@ -379,8 +385,8 @@ if __name__ == '__main__':
     dt = 1
     ndim = 2
     t_max = 0.95
-    Q_std = 1#10
-    R_std = 1#300
+    Q_std = 1 #10
+    R_std = 1 #300
     x0_std = 1
 
     safe_planning_radius = 10
