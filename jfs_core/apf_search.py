@@ -17,6 +17,7 @@ import logging
 
 from control import lqr
 import matplotlib.pyplot as plt
+from matplotlib.patches import Circle
 from numba import cfunc, carray
 from numbalsoda import lsoda_sig, lsoda
 import numpy as np
@@ -118,7 +119,8 @@ def fn(t, u, du, p):
         du[i] = tmp[i]
 
 
-def generate_apf_trajectory(x0, goal, obstacles, Katt_std=1, Krep_std=1, rho_std=1, d_obs=1, rng=None):
+def generate_apf_trajectory(x0, goal, obstacles,
+                            n=5, Katt_std=1, Krep_std=1, rho_std=1, d_obs=1, tf_max=60, t0=0, rng=None):
     if rng is None:
         rng = np.random.default_rng()
 
@@ -126,6 +128,16 @@ def generate_apf_trajectory(x0, goal, obstacles, Katt_std=1, Krep_std=1, rho_std
 
     func_apf = FAPF(x0, obstacles, goal, Katt=Katt, Krep=Krep, rho_0=rho_0, d_obs=d_obs)
 
+    # Note that max step is important otherwise the solver will return a straight line
+    res = solve_ivp(func_apf.fn, (t0, tf_max), x0, method='LSODA', max_step=1e-1,
+                    events=func_apf.event, dense_output=True)
+    tf = res.t[-1]
+    t = np.linspace(t0, tf, n)
+    cpts = res.sol(t)
+
+    traj = Bernstein(cpts, t0=t0, tf=tf)
+
+    return traj
 
 def create_perturbed_parameters(Katt_std, Krep_std, rho_std, rng):
     Katt = rng.lognormal(mean=1, sigma=Katt_std)
@@ -147,8 +159,10 @@ class FAPF:
         self.t0 = t0
 
     def fn(self, t, x):
-        u_att_x = self.Katt*(x[0] - self.goal[0])
-        u_att_y = self.Katt*(x[1] - self.goal[1])
+        norm = np.linalg.norm(x - self.goal)
+        # print(f'{norm=}')
+        u_att_x = self.Katt*(x[0] - self.goal[0]) / norm
+        u_att_y = self.Katt*(x[1] - self.goal[1]) / norm
 
         u_rep_x = 0
         u_rep_y = 0
@@ -164,28 +178,27 @@ class FAPF:
                          -u_att_y - u_rep_y])
 
     def event(self, t, x):
-        return np.linalg.norm(x - self.goal)
+        distance = np.linalg.norm(x - goal)
+
+        if distance < 1e-3:
+            distance = 0.0
+
+        return distance
+
+    event.terminal = True  # Required for the integration to stop early
 
 
 if __name__ == '__main__':
+    plt.close('all')
     seed = 3
     rng = default_rng(seed)
 
-    n = 7
-    t0 = 0
-    tf = 30
-    dt = 1
-    ndim = 2
-    t_max = 0.95
-    Q_std = 1 #10
-    R_std = 1 #300
-    x0_std = 1
-
-    safe_planning_radius = 10
-    safe_dist = 2
-    vmax = 3
-    wmax = np.pi/4
-
+    n = 10
+    d_obs = 0.5
+    goal = np.array([3, 5], dtype=float)
+    x0 = np.array([0, 0], dtype=float)
+    obstacles = [np.array([1, 2], dtype=float),  # Obstacle positions (m)
+                 np.array([2.5, 3], dtype=float)]
     # obstacles = [np.array([8, 0], dtype=float),  # Obstacle positions (m)
     #              np.array([20, 2], dtype=float),
     #              np.array([60, 1], dtype=float),
@@ -194,26 +207,23 @@ if __name__ == '__main__':
     #              np.array([80, -3], dtype=float),
     #              np.array([30, -1], dtype=float)]
 
-    obstacles = [np.array([1, 2], dtype=float),  # Obstacle positions (m)
-                 np.array([2.5, 3], dtype=float)]
-
-    goal = np.array([3, 5], dtype=float)
-    x0 = np.array([0, 0], dtype=float)
-
     fapf = FAPF(x0, obstacles, goal, Katt=1, Krep=1, rho_0=0.1, d_obs=0.5)
-
-    res = solve_ivp(fapf.fn, (t0, tf), x0, method='LSODA', events=fapf.event)
-
-    plt.close('all')
+    res = solve_ivp(fapf.fn, (0, 60), x0, method='LSODA', max_step=1, events=fapf.event)
     plt.figure()
     plt.plot(res.y[0], res.y[1])
 
-    # out = [x0]
-    # n_samp = 100
-    # dt = (tf - t0) / n_samp
-    # for t in np.linspace(t0, tf, n_samp+1):
-    #     out.append(out[-1] + fapf.fn(t, out[-1])*dt)
+    # traj = generate_apf_trajectory(x0, goal, obstacles, n=n)
+    # traj.plot(showCpts=True)
 
-    # out = np.array(out)
-    # plt.figure()
-    # plt.plot(out[:, 0], out[:, 1])
+    trajs = []
+    for i in range(100):
+        print(i)
+        trajs.append(generate_apf_trajectory(x0, goal, obstacles, n=n, d_obs=d_obs, rho_std=0.1, rng=rng))
+
+    fig, ax = plt.subplots()
+    for traj in trajs:
+        traj.plot(ax, showCpts=False)
+
+    for obs in obstacles:
+        artist = Circle(obs, radius=d_obs)
+        ax.add_artist(artist)
