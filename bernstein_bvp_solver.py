@@ -6,8 +6,10 @@ Created on Fri Jan 27 11:11:20 2023
 @author: magicbycalvin
 """
 
+import matplotlib.pyplot as plt
 from numba import njit
 import numpy as np
+import scipy.integrate as sint
 from scipy.integrate import quad
 from scipy.linalg import solve
 from scipy.special import factorial, binom
@@ -69,10 +71,12 @@ def solve_bvp(f, k, l, N, a, b, ndim):
         dual_coefficients = compute_dual_coefficients(n-m)
 
         y = Bernstein(cpts)
-        v = compute_v(f, y, n, m, k, l, dual_coefficients, cpts)
+        v = compute_v(f, y, n, m, k, l, dual_coefficients, cpts_new)
         G = compute_G(n, m, k, l)
 
-        inner_pts = solve(G, v)
+        inner_cpts = solve(G, v)
+        cpts_new[:, k:n-l+1] = inner_cpts
+        cpts = cpts_new.copy()
 
     return cpts
 
@@ -82,16 +86,16 @@ def compute_outer_coefficients(n, ndim, k, l, a, b):
 
     # Zeroth derivative (Bernstein polynomial end point property)
     if k > 0:
-        cpts[:, 0] = a[:, 0]
+        cpts[:, 0] = a[:ndim, 0]
     if l > 0:
-        cpts[:, -1] = b[:, 0]
+        cpts[:, -1] = b[:ndim, 0]
 
     # Higher order derivatives (derivative property of Bernstein polynomials)
     for i in range(1, k):
-        cpts[:, i] = (factorial(n - i) / factorial(n) * a[:, i] -
+        cpts[:, i] = (factorial(n - i) / factorial(n) * a[:ndim, i] -
                       sum([(-1)**(i - h) * binom(i, h) * cpts[:, h] for h in range(i)]))
     for j in range(1, l):
-        cpts[:, n-j] = ((-1)**j * factorial(n - j) / factorial(n) * b[:, j] -
+        cpts[:, n-j] = ((-1)**j * factorial(n - j) / factorial(n) * b[:ndim, j] -
                         sum([((-1)**h) * binom(j, h) * cpts[:, n-j+h] for h in range(1, j+1)]))
 
     return cpts
@@ -144,7 +148,7 @@ def _B(u, n):
 @njit(cache=True)
 def _pochhammer(x, n):
     """
-    Compute the Pochhammer symbol for (x)_n
+    Compute the Pochhammer symbol for (x)_n.
 
     The Pochhammer symbol is defined as Gamma(x + n) / Gamma(x) = x(x+1)...(x+n-1). For more information, see
     https://mathworld.wolfram.com/PochhammerSymbol.html
@@ -164,7 +168,7 @@ def _pochhammer(x, n):
     """
     result = 1.0
     for i in range(n):
-        result *= x + n
+        result *= x + i
 
     return result
 
@@ -176,7 +180,7 @@ def _pochhammer(x, n):
 
 
 def compute_v(f, y, n, m, k, l, dual_cpts, cpts):
-    v = np.empty(n-m)
+    v = np.empty(n-m+1)
 
     for i in range(n-m+1):
         a = 0
@@ -207,7 +211,7 @@ def compute_G(n, m, k, l):
 
 
 def compute_inner_product(f, y, q, n, m):
-    res = quad(lambda x: f(x, y.diff())*bernstein_basis(x, n, q), 0, 1)
+    res = quad(lambda x: f(x, y.diff())*bernstein_basis(x, n-m, q), 0, 1)
 
     return res[0]
 
@@ -220,23 +224,44 @@ def test_func(x, ydot):
     return ydot(x)**2 + 1
 
 
+def fn(x, y):
+    return np.vstack([y[1],
+                      y[1]**2 + 1])
+
+
+def bc(ya, yb):
+    return np.array([ya[0], yb[0]])
+
+
 if __name__ == '__main__':
+    plt.close('all')
+
     f = test_func
-    k = 3
-    l = 3
-    N = 10
-    a = np.array([
-        [1, 10, 2],
-        [2, 1, 3]], dtype=float)
-    b = np.array([
-        [8, 1, -0.1],
-        [10, 2, -0.2]], dtype=float)
+    k = 1
+    l = 1
+    N = 3
+    a = np.array([[0]], dtype=float)
+    b = np.array([[0]], dtype=float)
+    # a = np.array([
+    #     [1, 10, 2],
+    #     [2, 1, 3]], dtype=float)
+    # b = np.array([
+    #     [8, 1, -0.1],
+    #     [10, 2, -0.2]], dtype=float)
     ndim = 1
 
-    cpts = solve_bvp(f, k, l, N, a[0, :], b[0, :], ndim)
+    cpts = solve_bvp(f, k, l, N, a, b, ndim)
     print(f'{cpts}')
 
     traj = Bernstein(cpts)
     print(f'{traj}')
     print(f'{traj.diff()}')
     print(f'{traj.diff().diff()}')
+
+    x = np.linspace(0, 1, 1001)
+    y = -np.log(np.cos(x-0.5)/np.cos(0.5))
+
+    traj.plot()
+    plt.plot(x, y)
+
+    res = sint.solve_bvp(fn, bc, x, np.zeros((2, 1001)))
