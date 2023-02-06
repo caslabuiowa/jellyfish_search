@@ -7,31 +7,39 @@ Created on Tue Dec 20 12:01:18 2022
 """
 
 import bisect
+from dataclasses import dataclass
 import logging
 
 from control import lqr
 import matplotlib.pyplot as plt
+from matplotlib.patches import Circle
 from numba import cfunc, carray
 from numbalsoda import lsoda_sig, lsoda
 import numpy as np
 from numpy.random import default_rng
+from numpy.typing import ArrayLike
 
 from polynomial.bernstein import Bernstein
 from stoch_opt.constraint_functions import CollisionAvoidance, MaximumSpeed, MaximumAngularRate, SafeSphere
 from stoch_opt.cost_functions import SumOfDistance
 from stoch_opt.utils import state2cpts
 
+from apf_search import generate_apf_trajectory
+from brachistochrone_search import generate_brachistochrone_trajectory
 from lqr_search import generate_lqr_trajectory
 
 # TODO: Major refactoring required since the functions and objects are incredibly messy
 
-LOG_LEVEL = logging.WARN
+LOG_LEVEL = logging.DEBUG
 logger = logging.getLogger(__name__)
 logger.setLevel(LOG_LEVEL)
 if len(logger.handlers) < 1:
     stream_handler = logging.StreamHandler()
     stream_handler.setLevel(LOG_LEVEL)
     logger.addHandler(stream_handler)
+
+
+DISABLE_CONSTRAINTS = False
 
 
 class Worker:
@@ -48,9 +56,10 @@ class Worker:
     def do_work(self, safe_dist, vmax, wmax):
         self.running = True
         for i in range(self.n_trajectories):
+            print(f'Trajectory {i}')
             temp_traj = self.generate_trajectory()
             logger.debug('Checking feasibility')
-            if is_feasible(temp_traj, self.obstacles, safe_dist, vmax, wmax, self.rsafe):
+            if is_feasible(temp_traj, self.obstacles, safe_dist, vmax, wmax, self.rsafe) or DISABLE_CONSTRAINTS:
                 logger.debug('Assigning cost')
                 cost = cost_fn(temp_traj, self.solver_params['goal'])
                 bisect.insort(self.trajectories, (temp_traj, cost), key=lambda x: x[1])
@@ -90,9 +99,19 @@ class JellyfishController:
                                                n=self.n,
                                                rng=self.rng)
             elif solver_method.lower() == 'brachistochrone':
-                pass
-            elif solver_method.lower() == 'least_action':
-                pass
+                return generate_brachistochrone_trajectory(solver_params['x0'],
+                                                           solver_params['goal'],
+                                                           solver_params['R_std'],
+                                                           n=self.n,
+                                                           rng=self.rng)
+            elif solver_method.lower() == 'apf':
+                return generate_apf_trajectory(solver_params['x0'],
+                                               solver_params['goal'],
+                                               solver_params['obstacles'],
+                                               rho_std=0.1,
+                                               tf_max=600,
+                                               n=self.n,
+                                               rng=self.rng)
             else:
                 raise ValueError('Incorrect solver method.')
 
@@ -105,17 +124,17 @@ class JellyfishController:
 
 # TODO: create and integrate the solver and problem parameters classes instead of using a dictionary
 # TODO: streamline the locations where parameters are input to the problem
+@dataclass
 class SolverParameters:
-    def __init__(self, x0, goal, tf, method):
-        self.x0 = x0
-        self.goal = goal
-        self.tf = tf
-        self.method = method
+    method: str
 
 
+@dataclass
 class ProblemParameters:
-    def __init__(self):
-        pass
+    x0: ArrayLike
+    goal: ArrayLike
+    tf: float
+    obstacles: ArrayLike
 
 
 def is_feasible(traj, obstacles, safe_dist, vmax, wmax, rsafe):
@@ -131,6 +150,7 @@ def is_feasible(traj, obstacles, safe_dist, vmax, wmax, rsafe):
     for i, cons in enumerate(constraints):
         logger.debug(f'Constraint {i}')
         if not cons.call([traj]):
+            logger.debug('--> Infeasible')
             return False
 
     return True
@@ -175,7 +195,7 @@ if __name__ == '__main__':
     vmax = 3
     wmax = np.pi/4
 
-    obstacles = [np.array([15, 0], dtype=float),  # Obstacle positions (m)
+    obstacles = [np.array([5, 0], dtype=float),  # Obstacle positions (m)
                  np.array([20, 2], dtype=float),
                  np.array([60, 1], dtype=float),
                  np.array([40, 2], dtype=float),
@@ -184,19 +204,21 @@ if __name__ == '__main__':
                  np.array([30, -1], dtype=float)]
 
     goal = np.array([100, 0], dtype=float)
-    initial_position = np.array([0, 0], dtype=float)
+    initial_position = np.array([0, 0.1], dtype=float)
     initial_velocity = np.array([1, 0], dtype=float)
     initial_acceleration = np.array([0.1, 1], dtype=float)
 
     cur_goal = project_goal(initial_position, safe_planning_radius, goal)
     x0 = np.array([initial_position[0],
-                   initial_velocity[0],
-                   initial_acceleration[0],
-                   0,
+                    initial_velocity[0],
+                    initial_acceleration[0],
+                    0,
                    initial_position[1],
-                   initial_velocity[1],
-                   initial_acceleration[1],
-                   0], dtype=float)
+                    initial_velocity[1],
+                    initial_acceleration[1],
+                    0
+                   ], dtype=float)
+    # x0 = initial_position
 
     solver_params = {'method': 'lqr',
                      'x0': x0,
@@ -204,7 +226,8 @@ if __name__ == '__main__':
                      'tf': tf,
                      'Q_std': Q_std,
                      'R_std': R_std,
-                     'x0_std': x0_std}
+                     'x0_std': x0_std,
+                     'obstacles': obstacles}
 
     jfc = JellyfishController(n, ndim, tf, obstacles, safe_dist, vmax, wmax, safe_planning_radius, t_max,
                               n_trajectories, rng_seed=seed)
@@ -214,3 +237,7 @@ if __name__ == '__main__':
     fig, ax = plt.subplots()
     for traj in trajs:
         traj[0].plot(ax, showCpts=False)
+
+    for obs in obstacles:
+        artist = Circle(obs, radius=safe_dist)
+        ax.add_artist(artist)

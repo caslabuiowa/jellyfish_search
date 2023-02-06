@@ -91,6 +91,8 @@ class MaximumAngularRate(ConstraintBase):
         return True
 
 
+# TODO: Fix this (and possibly others) to only take a single trajectory and extend it to multiple trajectories with a
+# new function
 class SafeSphere(ConstraintBase):
     def __init__(self, x0, rsafe):
         self.x0 = x0.squeeze()[..., np.newaxis]
@@ -98,8 +100,8 @@ class SafeSphere(ConstraintBase):
 
     def call(self, trajs):
         for i, traj in enumerate(trajs):
-            x0 = self.x0[i].reshape(-1, 1)
-            if np.any(np.linalg.norm(traj.cpts - x0) < self.rsafe):
+            # x0 = self.x0[i].reshape(-1, 1)
+            if np.any(np.linalg.norm(traj.cpts - self.x0, axis=0) > self.rsafe):
                 # print('[!] Safe sphere constraint infeasible.')
                 return False
 

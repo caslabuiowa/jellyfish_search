@@ -9,7 +9,6 @@ Created on Fri Jan 27 11:11:20 2023
 import matplotlib.pyplot as plt
 from numba import njit
 import numpy as np
-import scipy.integrate as sint
 from scipy.integrate import quad
 from scipy.linalg import solve
 from scipy.special import factorial, binom
@@ -224,23 +223,14 @@ def test_func(x, ydot):
     return ydot(x)**2 + 1
 
 
-def fn(x, y):
-    return np.vstack([y[1],
-                      y[1]**2 + 1])
-
-
-def bc(ya, yb):
-    return np.array([ya[0], yb[0]])
-
-
 if __name__ == '__main__':
     plt.close('all')
 
     f = test_func
-    k = 1
-    l = 1
-    N = 3
-    a = np.array([[0]], dtype=float)
+    k = 2
+    l = 0
+    N = 20
+    a = np.array([[0, -1]], dtype=float)
     b = np.array([[0]], dtype=float)
     # a = np.array([
     #     [1, 10, 2],
@@ -263,5 +253,3 @@ if __name__ == '__main__':
 
     traj.plot()
     plt.plot(x, y)
-
-    res = sint.solve_bvp(fn, bc, x, np.zeros((2, 1001)))

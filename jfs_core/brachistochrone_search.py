@@ -15,7 +15,7 @@ import timeit
 from polynomial.bernstein import Bernstein
 
 
-def brachistochrone_search(x0, goal, R_std, n=5, rng=None):
+def generate_brachistochrone_trajectory(x0, goal, R_std, n=5, rng=None):
     if rng is None:
         rng = np.random.default_rng()
 
@@ -32,7 +32,13 @@ def solve_brachistochrone_problem(goal, n, x0, sign_y, R_std, rng):
     theta_f = find_theta(goal[0], goal[1])
     R = goal[1] / (1 - np.cos(theta_f))
     R += rng.normal(scale=R_std)
+    if R < 0:
+        R = -R
+        sign_y = -sign_y
     tf = theta_f * R / 9.81
+    # if tf < 0:
+    #     print(f'negative tf, {R=}')
+    #     tf = -tf
 
     theta = np.linspace(0, theta_f, n+1)
     solution = R*np.array([theta - np.sin(theta),
@@ -148,7 +154,7 @@ if __name__ == '__main__':
 
     trajs = []
     for i in range(100):
-        traj = brachistochrone_search(x0, goal, R_std, n=n, rng=rng)
+        traj = generate_brachistochrone_trajectory(x0, goal, R_std, n=n, rng=rng)
         trajs.append(traj)
 
     plt.close('all')
