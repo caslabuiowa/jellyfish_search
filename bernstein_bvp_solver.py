@@ -5,11 +5,13 @@ Created on Fri Jan 27 11:11:20 2023
 
 @author: magicbycalvin
 """
+import sys
+sys.path.append('/home/magicbycalvin/Projects/last_minute_comprehensive/BeBOT')
 
 import matplotlib.pyplot as plt
 from numba import njit
 import numpy as np
-from scipy.integrate import quad
+from scipy.integrate import quad, solve_ivp
 from scipy.linalg import solve
 from scipy.special import factorial, binom
 
@@ -70,11 +72,11 @@ def solve_bvp(f, k, l, N, a, b, ndim):
         dual_coefficients = compute_dual_coefficients(n-m)
 
         y = Bernstein(cpts)
-        v = compute_v(f, y, n, m, k, l, dual_coefficients, cpts_new)
+        v = compute_v(ndim, f, y, n, m, k, l, dual_coefficients, cpts_new)
         G = compute_G(n, m, k, l)
 
         inner_cpts = solve(G, v)
-        cpts_new[:, k:n-l+1] = inner_cpts
+        cpts_new[:, k:n-l+1] = inner_cpts.T
         cpts = cpts_new.copy()
 
     return cpts
@@ -178,17 +180,17 @@ def _pochhammer(x, n):
 #     p = np.empty((m, n-m))
 
 
-def compute_v(f, y, n, m, k, l, dual_cpts, cpts):
-    v = np.empty(n-m+1)
+def compute_v(ndim, f, y, n, m, k, l, dual_cpts, cpts):
+    v = np.empty((n-m+1, ndim))
 
     for i in range(n-m+1):
-        a = 0
+        a = np.zeros((1, ndim))
         for q in range(n-m+1):
-            I = compute_inner_product(f, y, q, n, m)
+            I = compute_inner_product(ndim, f, y, q, n, m)
             a += dual_cpts[i, q]*I
         a *= factorial(n-m) / factorial(n)
 
-        b = 0
+        b = np.zeros((1, ndim))
         for h in range(k-i):
             b += (-1)**(m-h)*binom(m, h)*cpts[:, i+h]
 
@@ -209,47 +211,99 @@ def compute_G(n, m, k, l):
     return G
 
 
-def compute_inner_product(f, y, q, n, m):
-    res = quad(lambda x: f(x, y.diff())*bernstein_basis(x, n-m, q), 0, 1)
+def compute_inner_product(ndim, f, y, q, n, m):
+    ydots = [y]
+    for i in range(m-1):
+        ydots.append(ydots[i].diff())
 
-    return res[0]
+    I = np.empty((1, ndim))
+    for i in range(ndim):
+        res = quad(lambda x: f[i](x, *ydots)*bernstein_basis(x, n-m, q), 0, 1)
+        I[:, i] = res[0]
+
+    return I
 
 
 def bernstein_basis(x, n, i):
     return binom(n, i) * x**i * (1 - x)**(n-i)
 
 
-def test_func(x, ydot):
-    return ydot(x)**2 + 1
+# def test_func(*ydots):
+#     def fn1(x):
+#         ydots[1](x)**2 + 1
+
+#     return [fn1]
+
+
+# def fn1(x, *ydots):
+#     return ydots[1](x)[0, :]**2 + 1
+
+
+# def fn2(x, *ydots):
+#     return ydots[1](x)[1, :]**2 + 1
+
+
+def fn1(x, *ydots):
+    return np.cos(ydots[0](x)[2, :])*10
+
+
+def fn2(x, *ydots):
+    return np.sin(ydots[0](x)[2, :])*10
+
+
+def fn3(x, *ydots):
+    return 0.1*10*np.pi*2
+
+
+def test_fn(t, x):
+    return np.array([np.cos(x[2]),
+                     np.sin(x[2]),
+                     0.1*np.pi*2])
 
 
 if __name__ == '__main__':
     plt.close('all')
 
-    f = test_func
-    k = 1
-    l = 1
-    N = 20
-    a = np.array([[0]], dtype=float)
-    b = np.array([[0]], dtype=float)
-    a = np.array([
-        [1, 10, 2],
-        [2, 1, 3]], dtype=float)
-    b = np.array([
-        [8, 1, -0.1],
-        [10, 2, -0.2]], dtype=float)
-    ndim = 1
+    N = 10
+    f = [fn1,
+         fn2,
+         fn3]
+    a = np.array([[0],
+                  [0],
+                  [np.pi/2]], dtype=float)
+    b = np.array([[0],
+                  [0],
+                  [0]], dtype=float)
+    b = np.empty((0, 0))
+
+    # a = np.array([
+    #     [1, 10, 2],
+    #     [2, 1, 3]], dtype=float)
+    # b = np.array([
+    #     [8, 1, -0.1],
+    #     [10, 2, -0.2]], dtype=float)
+
+    k = a.shape[1]
+    l = b.shape[1]
+    ndim = len(f)
 
     cpts = solve_bvp(f, k, l, N, a, b, ndim)
     print(f'{cpts}')
 
     traj = Bernstein(cpts)
-    print(f'{traj}')
-    print(f'{traj.diff()}')
-    print(f'{traj.diff().diff()}')
+    # print(f'{traj}')
+    # print(f'{traj.diff()}')
+    # print(f'{traj.diff().diff()}')
 
-    x = np.linspace(0, 1, 1001)
-    y = -np.log(np.cos(x-0.5)/np.cos(0.5))
+    # x = np.linspace(0, 1, 1001)
+    # y = -np.log(np.cos(x-0.5)/np.cos(0.5))
 
-    traj.plot()
-    plt.plot(x, y)
+    # traj.plot()
+    # plt.plot(x, y)
+
+    res = solve_ivp(test_fn, (0, 10), a.squeeze(), t_eval=np.linspace(0, 10, 1001))
+
+    plt.figure()
+    plt.plot(traj.cpts[0, :], traj.cpts[1, :], '.--', lw=3, ms=15)
+    plt.plot(traj.curve[0, :], traj.curve[1, :], lw=3)
+    plt.plot(res.y[0, :], res.y[1, :], '--', lw=3)
