@@ -227,17 +227,17 @@ if __name__ == '__main__':
     plt.close('all')
 
     f = test_func
-    k = 2
-    l = 0
+    k = 1
+    l = 1
     N = 20
-    a = np.array([[0, -1]], dtype=float)
+    a = np.array([[0]], dtype=float)
     b = np.array([[0]], dtype=float)
-    # a = np.array([
-    #     [1, 10, 2],
-    #     [2, 1, 3]], dtype=float)
-    # b = np.array([
-    #     [8, 1, -0.1],
-    #     [10, 2, -0.2]], dtype=float)
+    a = np.array([
+        [1, 10, 2],
+        [2, 1, 3]], dtype=float)
+    b = np.array([
+        [8, 1, -0.1],
+        [10, 2, -0.2]], dtype=float)
     ndim = 1
 
     cpts = solve_bvp(f, k, l, N, a, b, ndim)
