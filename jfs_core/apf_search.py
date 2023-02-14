@@ -35,90 +35,6 @@ if len(logger.handlers) < 1:
     logger.addHandler(stream_handler)
 
 
-# def generate_lqr_trajectory(x0, goal, Q_std, R_std, x0_std, tf, n=5, rng=None):
-#     if rng is None:
-#         rng = default_rng()
-
-#     logger.debug('Initializing LQR problem')
-#     A, B, Q, R = initialize_lqr_problem(Q_std, R_std, rng)
-#     logger.debug('Perturbing initial state')
-#     x0_perturbed = perturb_initial_state(x0, goal, x0_std, rng)
-
-#     logger.debug((f'{A=}\n'
-#                   f'{B=}\n'
-#                   f'{Q=}\n'
-#                   f'{R=}\n'
-#                   f'{x0=}\n'
-#                   f'{x0_perturbed=}'))
-
-#     traj = solve_lqr_problem(A, B, Q, R, x0_perturbed, n, tf, goal)
-
-#     return traj
-
-
-# def initialize_lqr_problem(Q_std, R_std, rng):
-#     A = np.array([[0, 1, 0, 0, 0, 0, 0, 0],
-#                   [0, 0, 1, 0, 0, 0, 0, 0],
-#                   [0, 0, 0, 1, 0, 0, 0, 0],
-#                   [0, 0, 0, 0, 0, 0, 0, 0],
-#                   [0, 0, 0, 0, 0, 1, 0, 0],
-#                   [0, 0, 0, 0, 0, 0, 1, 0],
-#                   [0, 0, 0, 0, 0, 0, 0, 1],
-#                   [0, 0, 0, 0, 0, 0, 0, 0]], dtype=float)
-#     B = np.array([[0, 0],
-#                   [0, 0],
-#                   [0, 0],
-#                   [1, 0],
-#                   [0, 0],
-#                   [0, 0],
-#                   [0, 0],
-#                   [0, 1]], dtype=float)
-
-#     Q = rng.normal(0, Q_std, (8, 8))
-#     R = rng.normal(0, R_std, (2, 2))
-#     Q = (0.5*Q.T@Q).round(6)
-#     R = (0.5*R.T@R).round(6)
-
-#     return A, B, Q, R
-
-
-# def perturb_initial_state(x0, goal, std, rng):
-#     x0_perturbed = x0.copy()
-#     # Subtract goal because the LQR controller tries to bring all states back to zero
-#     # Only perturb the position since we want to keep the higher order derivatives of the initial state constant
-#     # x0_perturbed += rng.normal([-goal[0], 0, 0, 0,
-#     #                             -goal[1], 0, 0, 0],
-#     #                            std)
-#     x0_perturbed[0] -= rng.normal(goal[0], std)
-#     x0_perturbed[4] -= rng.normal(goal[1])
-
-#     return x0_perturbed
-
-
-# def solve_lqr_problem(A, B, Q, R, x0, n, tf, goal):
-#     K, S, E = lqr(A, B, Q, R)
-
-#     usol, success = lsoda(fn.address, x0, np.linspace(0, tf, n+1), data=(A - B@K))
-
-#     logger.debug(f'{usol=}')
-#     cpts = np.concatenate([[usol[:, 0]],
-#                            [usol[:, 4]]], axis=0)
-#     cpts -= cpts[:, 0, np.newaxis]
-#     logger.debug(f'{cpts=}')
-#     traj = Bernstein(cpts, tf=tf)
-
-#     return traj
-
-
-# @cfunc(lsoda_sig)
-# def fn(t, u, du, p):
-#     u_ = carray(u, (8,))
-#     p_ = carray(p, (8, 8))
-#     tmp = p_@u_
-#     for i in range(8):
-#         du[i] = tmp[i]
-
-
 def generate_apf_trajectory(x0, goal, obstacles,
                             n=5, Katt_std=1, Krep_std=1, rho_std=1, d_obs=1, tf_max=60, t0=0, rng=None):
     if rng is None:
@@ -148,7 +64,8 @@ def create_perturbed_parameters(Katt_std, Krep_std, rho_std, rng):
 
 
 class FAPF:
-    def __init__(self, x0, obstacles, goal, Katt=1, Krep=1, rho_0=1, d_obs=1, t0=0):
+    def __init__(self, x0, obstacles, goal, Katt=1, Krep=1, rho_0=1, d_obs=1, t0=0, d=1e-3,
+                 disable_rho0=False, gain_fn=None, goal2=None):
         self.x0 = x0
         self.obstacles = obstacles
         self.goal = goal
@@ -157,25 +74,55 @@ class FAPF:
         self.rho_0 = rho_0
         self.d_obs = d_obs
         self.t0 = t0
+        self.d = d
+        self.disable_rho0 = disable_rho0
+        self.gain_fn = gain_fn
+        self.goal2 = goal2
 
     def fn(self, t, x):
-        norm = np.linalg.norm(x - self.goal)
+        norm = np.linalg.norm(x.squeeze() - self.goal) + self.d
         # print(f'{norm=}')
         u_att_x = self.Katt*(x[0] - self.goal[0]) / norm
         u_att_y = self.Katt*(x[1] - self.goal[1]) / norm
 
+        if self.goal2 is not None:
+            norm = np.linalg.norm(x.squeeze() - self.goal2) + self.d
+            # print(f'{norm=}')
+            u_att_x += self.Katt*(x[0] - self.goal2[0]) / norm
+            u_att_y += self.Katt*(x[1] - self.goal2[1]) / norm
+
         u_rep_x = 0
         u_rep_y = 0
         for obs in self.obstacles:
-            rho_x = np.linalg.norm(x - obs) - self.d_obs
-            if rho_x <= self.rho_0:
-                # gain = (self.Krep/rho_x**3) * (1 - rho_x/self.rho_0)
-                gain = -self.Krep*(self.rho_0 - rho_x) / (self.rho_0*rho_x**4)
-                u_rep_x += gain*(x[0] - obs[0])
-                u_rep_y += gain*(x[1] - obs[1])
+            rho_x = np.linalg.norm(x.squeeze() - obs.squeeze()) - self.d_obs
+            # if rho_x < 1e-3:
+            #     rho_x = 1e-3
+            if rho_x <= self.rho_0 or self.disable_rho0:
+                if self.gain_fn is None:
+                    # gain = (self.Krep/rho_x**3) * (1 - rho_x/self.rho_0)
+                    # gain = -self.Krep*(self.rho_0 - rho_x) / (self.rho_0*rho_x**4)
+                    gain = self.Krep*(self.rho_0 - rho_x) / (self.rho_0*rho_x**3)
+                    u_rep_x += gain*(x[0] - obs[0])
+                    u_rep_y += gain*(x[1] - obs[1])
+                else:
+                    u_rep = self.gain_fn(x, obs, rho_x, self.rho_0)
+                    u_rep_x += u_rep[0]
+                    u_rep_y += u_rep[1]
 
-        return np.array([-u_att_x - u_rep_x,
-                         -u_att_y - u_rep_y])
+        # if np.abs(u_rep_x) > 50 or np.abs(u_rep_y) > 50:
+        #     print(f'{u_rep_x=}\n{u_rep_y=}')
+        # if u_rep_x > 100:
+        #     u_rep_x = 100
+        # elif u_rep_x < -100:
+        #     u_rep_x = -100
+
+        # if u_rep_y > 100:
+        #     u_rep_y = 100
+        # elif u_rep_y < -100:
+        #     u_rep_y = -100
+
+        return np.array([-u_att_x + u_rep_x,
+                         -u_att_y + u_rep_y])
 
     def event(self, t, x):
         distance = np.linalg.norm(x - self.goal)

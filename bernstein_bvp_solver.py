@@ -8,17 +8,19 @@ Created on Fri Jan 27 11:11:20 2023
 import sys
 sys.path.append('/home/magicbycalvin/Projects/last_minute_comprehensive/BeBOT')
 
+from matplotlib.patches import Circle
 import matplotlib.pyplot as plt
 from numba import njit
 import numpy as np
-from scipy.integrate import quad, solve_ivp
+from scipy.integrate import quad, solve_ivp, romb, trapezoid
 from scipy.linalg import solve
 from scipy.special import factorial, binom
 
+from jfs_core.apf_search import FAPF
 from polynomial.bernstein import Bernstein
 
 
-def solve_bvp(f, k, l, N, a, b, ndim):
+def solve_bvp(f, k, l, N, a, b, ndim, return_all_trajectories=False):
     """
     Solve a boundary value problem using the iterative dual Bernstein polynomial method [1]
 
@@ -28,6 +30,8 @@ def solve_bvp(f, k, l, N, a, b, ndim):
     with the boundary conditions,
         y^(i)(0) = a_i,    (i = 0, 1, ..., k-1)
         y^(j)(1) = b_j,    (j = 0, 1, ..., l-1)
+
+    Note: use the keyboard interrupt (ctrl+c) to stop the iterations early and return the current trajectory.
 
     [1] Gospodarczyk, Przemysław, and Paweł Woźny. "An iterative approximate method of solving boundary value problems
         using dual Bernstein polynomials." arXiv preprint arXiv:1709.02162 (2017).
@@ -53,6 +57,8 @@ def solve_bvp(f, k, l, N, a, b, ndim):
         acceleration).
     ndim : int
         Number of dimensions in the problem, e.g., ndim = 2 for a 2D problem.
+    return_all_trajectories: bool, optional
+        Returns trajectories of orders m-1 to N rather than just the final trajectory of order N. The default is False.
 
     Returns
     -------
@@ -64,22 +70,39 @@ def solve_bvp(f, k, l, N, a, b, ndim):
     # Algorithm 3.1 Step I from [1]
     cpts = compute_outer_coefficients(m-1, ndim, k, l, a, b)
 
+    if return_all_trajectories:
+        cpts_list = [cpts]
+
     # Algorithm 3.1 Step II from [1]
     for n in range(m, N+1):
-        # Eqns 2.7 and 2.8 from [1]
-        cpts_new = compute_outer_coefficients(n, ndim, k, l, a, b)
-        # Lemma 2.4 from [1]
-        dual_coefficients = compute_dual_coefficients(n-m)
+        try:
+            print(f'{n=}')
+            # Eqns 2.7 and 2.8 from [1]
+            cpts_new = compute_outer_coefficients(n, ndim, k, l, a, b)
+            # Lemma 2.4 from [1]
+            dual_coefficients = compute_dual_coefficients(n-m)
 
-        y = Bernstein(cpts)
-        v = compute_v(ndim, f, y, n, m, k, l, dual_coefficients, cpts_new)
-        G = compute_G(n, m, k, l)
+            y = Bernstein(cpts)
+            v = compute_v(ndim, f, y, n, m, k, l, dual_coefficients, cpts_new)
+            G = compute_G(n, m, k, l)
 
-        inner_cpts = solve(G, v)
-        cpts_new[:, k:n-l+1] = inner_cpts.T
-        cpts = cpts_new.copy()
+            inner_cpts = solve(G, v)
+            cpts_new[:, k:n-l+1] = inner_cpts.T
+            cpts = cpts_new.copy()
 
-    return cpts
+            if return_all_trajectories:
+                cpts_list.append(cpts)
+
+            if np.any(cpts > 1e3):
+                print('[!] Warning, one or more control points are greater than 1e3. Breaking.')
+                break
+        except KeyboardInterrupt:
+            break
+
+    if return_all_trajectories:
+        return cpts_list
+    else:
+        return cpts
 
 
 def compute_outer_coefficients(n, ndim, k, l, a, b):
@@ -197,7 +220,11 @@ def compute_v(ndim, f, y, n, m, k, l, dual_cpts, cpts):
         for h in range(n-l-i+1, m+1):
             b += (-1)**(m-h)*binom(m, h)*cpts[:, i+h]
 
-        v[i] = a - b
+        # print(f'{v=}\n{(a-b)=}')
+        v[i, :] = a - b
+        # print(f'{v[i, :]=}')
+        # print(f'{v=}')
+        # input()
 
     return v
 
@@ -218,8 +245,21 @@ def compute_inner_product(ndim, f, y, q, n, m):
 
     I = np.empty((1, ndim))
     for i in range(ndim):
-        res = quad(lambda x: f[i](x, *ydots)*bernstein_basis(x, n-m, q), 0, 1)
+        ### Gaussian quadrature integration
+        res = quad(lambda x: f[i](x, ydots)*bernstein_basis(x, n-m, q), 0, 1, limit=1000)
+        # print(f'===\n{res=}\n---\n{f[i](0.5, ydots)=}\n---\n{bernstein_basis(0.5, n-m, q)=}\n===')
         I[:, i] = res[0]
+
+        ### Romberg integration
+        # nevals = 2**9 + 1
+        # # t = np.linspace(0, 1, nevals)
+        # y = np.array([f[i](t, ydots)*bernstein_basis(t, n-m, q) for t in np.linspace(0, 1, nevals)])
+        # I[:, i] = romb(y.squeeze(), dx=1/nevals)
+
+        ### Trapezoidal integration
+        # nevals = 100
+        # y = np.array([f[i](t, ydots)*bernstein_basis(t, n-m, q) for t in np.linspace(0, 1, nevals)])
+        # I[:, i] = trapezoid(y.squeeze(), dx=1/nevals)
 
     return I
 
@@ -243,15 +283,15 @@ def bernstein_basis(x, n, i):
 #     return ydots[1](x)[1, :]**2 + 1
 
 
-def fn1(x, *ydots):
+def fn1(x, ydots):
     return np.cos(ydots[0](x)[2, :])*10
 
 
-def fn2(x, *ydots):
+def fn2(x, ydots):
     return np.sin(ydots[0](x)[2, :])*10
 
 
-def fn3(x, *ydots):
+def fn3(x, ydots):
     return 0.1*10*np.pi*2
 
 
@@ -261,19 +301,45 @@ def test_fn(t, x):
                      0.1*np.pi*2])
 
 
+def fn_apf1(fapf, x, ydots):
+    return fapf.fn(None, ydots[0](x))[0]
+
+
+def fn_apf2(fapf, x, ydots):
+    return fapf.fn(None, ydots[0](x))[1]
+
+
 if __name__ == '__main__':
     plt.close('all')
 
-    N = 10
-    f = [fn1,
-         fn2,
-         fn3]
-    a = np.array([[0],
-                  [0],
-                  [np.pi/2]], dtype=float)
-    b = np.array([[0],
-                  [0],
-                  [0]], dtype=float)
+    # APF stuff
+    # seed = 3
+    # rng = np.random.default_rng(seed)
+
+    d_obs = 0.5
+    goal = np.array([10, 3], dtype=float)
+    x0 = np.array([0, -1], dtype=float)
+    obstacles = [np.array([1, 2], dtype=float),  # Obstacle positions (m)
+                 np.array([2.5, 3], dtype=float)
+                 ]
+    obstacles = [np.array([5, 0.9], dtype=float),  # Obstacle positions (m)
+                 # np.array([20, 2], dtype=float),
+                 # np.array([60, 1], dtype=float),
+                 # np.array([40, 2], dtype=float),
+                 # np.array([50, -3], dtype=float),
+                 # np.array([80, -3], dtype=float),
+                 # np.array([30, -1], dtype=float),
+                 ]
+    fapf = FAPF(x0, obstacles, goal, Katt=11, Krep=0.01, rho_0=20, d_obs=d_obs, d=1e-3)
+    # End APF stuff
+
+    N = 100
+    f = [lambda x, ydots: fn_apf1(fapf, x, ydots),
+         lambda x, ydots: fn_apf2(fapf, x, ydots)]
+    a = x0[:, np.newaxis]
+    # b = goal[:, np.newaxis]
+    # b = np.array([[0],
+    #               [0]], dtype=float)
     b = np.empty((0, 0))
 
     # a = np.array([
@@ -301,9 +367,13 @@ if __name__ == '__main__':
     # traj.plot()
     # plt.plot(x, y)
 
-    res = solve_ivp(test_fn, (0, 10), a.squeeze(), t_eval=np.linspace(0, 10, 1001))
+    # res = solve_ivp(test_fn, (0, 10), a.squeeze(), t_eval=np.linspace(0, 10, 1001))
 
-    plt.figure()
-    plt.plot(traj.cpts[0, :], traj.cpts[1, :], '.--', lw=3, ms=15)
-    plt.plot(traj.curve[0, :], traj.curve[1, :], lw=3)
-    plt.plot(res.y[0, :], res.y[1, :], '--', lw=3)
+    fig, ax = plt.subplots()
+    ax.plot(traj.cpts[0, :], traj.cpts[1, :], '.--', lw=3, ms=15)
+    ax.plot(traj.curve[0, :], traj.curve[1, :], lw=3)
+    # plt.plot(res.y[0, :], res.y[1, :], '--', lw=3)
+
+    for obs in obstacles:
+        artist = Circle(obs, radius=d_obs)
+        ax.add_artist(artist)
