@@ -6,6 +6,9 @@ Created on Tue Dec 20 13:31:49 2022
 @author: magicbycalvin
 """
 
+import sys
+sys.path.append('..')
+
 import logging
 
 from control import lqr
@@ -16,6 +19,7 @@ import numpy as np
 from numpy.random import default_rng
 
 from polynomial.bernstein import Bernstein
+from bernstein_solvers.bernstein_least_squares import solve_least_squares
 
 LOG_LEVEL = logging.WARN
 logger = logging.getLogger(__name__)
@@ -89,11 +93,12 @@ def perturb_initial_state(x0, goal, std, rng):
 def solve_lqr_problem(A, B, Q, R, x0, n, tf, goal):
     K, S, E = lqr(A, B, Q, R)
 
-    usol, success = lsoda(fn.address, x0, np.linspace(0, tf, n+1), data=(A - B@K))
+    # usol, success = lsoda(fn.address, x0, np.linspace(0, tf, n+1), data=(A - B@K))
+    usol, success = lsoda(fn.address, x0, np.linspace(0, tf, 2*n), data=(A - B@K))
 
     logger.debug(f'{usol=}')
-    cpts = np.concatenate([[usol[:, 0]],
-                           [usol[:, 4]]], axis=0)
+    cpts = np.concatenate([[solve_least_squares(usol[:, 0], n)],
+                           [solve_least_squares(usol[:, 4], n)]], axis=0)
     cpts -= cpts[:, 0, np.newaxis]
     logger.debug(f'{cpts=}')
     traj = Bernstein(cpts, tf=tf)

@@ -13,6 +13,9 @@ Created on Tue Dec 20 13:31:49 2022
 @author: magicbycalvin
 """
 
+import sys
+sys.path.append('..')
+
 import logging
 
 from control import lqr
@@ -24,6 +27,7 @@ import numpy as np
 from numpy.random import default_rng
 from scipy.integrate import solve_ivp
 
+from bernstein_solvers.bernstein_least_squares import solve_least_squares
 from polynomial.bernstein import Bernstein
 
 LOG_LEVEL = logging.WARN
@@ -132,8 +136,11 @@ def generate_apf_trajectory(x0, goal, obstacles,
     res = solve_ivp(func_apf.fn, (t0, tf_max), x0, method='LSODA', max_step=1e-1,
                     events=func_apf.event, dense_output=True)
     tf = res.t[-1]
-    t = np.linspace(t0, tf, n)
-    cpts = res.sol(t)
+    t = np.linspace(t0, tf, 2*n)
+    # cpts = res.sol(t)
+    sol = res.sol(t)
+    cpts = np.concatenate([[solve_least_squares(sol[0, :], n)],
+                            [solve_least_squares(sol[1, :], n)]])
 
     traj = Bernstein(cpts, t0=t0, tf=tf)
 

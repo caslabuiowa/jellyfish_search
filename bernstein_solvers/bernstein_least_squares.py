@@ -6,16 +6,20 @@ Created on Tue Feb 14 15:36:41 2023
 @author: magicbycalvin
 """
 
-from numba import njit
 import numpy as np
 from scipy.linalg import qr, solve
 from scipy.special import binom
 
 
-def solve_least_squares(f_samples, n, compute_residuals=False):
+def solve_least_squares(f_samples, n, t_samples=None, compute_residuals=False):
     l = f_samples.size
 
-    A = create_A(n, l, f_samples)
+    if t_samples is None:
+        t_samples = np.linspace(0, 1, l)
+    else:
+        assert t_samples.size == f_samples.size
+
+    A = create_A(n, l, t_samples)
     Q, R = qr(A)
     d = Q.T@f_samples
     d1 = d[:n+1]
@@ -43,6 +47,10 @@ def create_A(n, l, x):
 
 
 if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+    from polynomial.bernstein import Bernstein
+    plt.close('all')
+
     n = 5
     l = 10
     x = np.linspace(0, 1, l)
@@ -55,3 +63,8 @@ if __name__ == '__main__':
     d = Q.T@y_samp
     d1 = d[:n+1]
     d2 = d[n+1:]
+
+    cpts = solve_least_squares(y_samp, n)
+    c = Bernstein(cpts)
+    c.plot()
+    plt.plot(x, y_samp, 'o', ms=5)
