@@ -140,10 +140,10 @@ class ProblemParameters:
 def is_feasible(traj, obstacles, safe_dist, vmax, wmax, rsafe):
     logger.debug('Inside is_feasible')
     constraints = [
-        CollisionAvoidance(safe_dist, obstacles, elev=100),
-        MaximumSpeed(vmax),
-        MaximumAngularRate(wmax),
-        SafeSphere(traj.cpts[:, 0].squeeze(), rsafe)
+        # CollisionAvoidance(safe_dist, obstacles, elev=100),
+        # MaximumSpeed(vmax),
+        # MaximumAngularRate(wmax),
+        # SafeSphere(traj.cpts[:, 0].squeeze(), rsafe)
     ]
 
     logger.debug('Starting feasibility check')
@@ -178,13 +178,13 @@ def project_goal(x, rsafe, goal):
 
 if __name__ == '__main__':
     seed = 3
-    Q_std = 1
-    R_std = 1
+    Q_std = 1000
+    R_std = 1000
     x0_std = 1
 
     n = 5
     t0 = 0
-    tf = 10
+    tf = 30
     # dt = 1
     ndim = 2
     t_max = 0.95
@@ -241,3 +241,7 @@ if __name__ == '__main__':
     for obs in obstacles:
         artist = Circle(obs, radius=safe_dist)
         ax.add_artist(artist)
+
+    fig2, ax2 = plt.subplots()
+    for traj in trajs:
+        traj[0].normSquare().plot(ax2, showCpts=False)
