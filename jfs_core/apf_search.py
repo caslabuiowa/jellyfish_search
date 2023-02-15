@@ -140,7 +140,7 @@ def generate_apf_trajectory(x0, goal, obstacles,
     # cpts = res.sol(t)
     sol = res.sol(t)
     cpts = np.concatenate([[solve_least_squares(sol[0, :], n)],
-                            [solve_least_squares(sol[1, :], n)]])
+                           [solve_least_squares(sol[1, :], n)]])
 
     traj = Bernstein(cpts, t0=t0, tf=tf)
 
