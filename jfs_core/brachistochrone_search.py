@@ -6,6 +6,9 @@ Created on Fri Jan 20 12:50:58 2023
 @author: magicbycalvin
 """
 
+import sys
+sys.path.append('..')
+
 import matplotlib.pyplot as plt
 from numba import njit
 import numpy as np
@@ -13,6 +16,7 @@ from scipy.optimize import minimize, Bounds, newton, toms748
 import timeit
 
 from polynomial.bernstein import Bernstein
+from bernstein_solvers.bernstein_least_squares import solve_least_squares
 
 
 def generate_brachistochrone_trajectory(x0, goal, R_std, n=5, rng=None):
@@ -44,8 +48,10 @@ def solve_brachistochrone_problem(goal, n, x0, sign_y, R_std, rng):
     solution = R*np.array([theta - np.sin(theta),
                            (1 - np.cos(theta))*sign_y])
     solution += x0[:, np.newaxis]
+    cpts = np.concatenate([[solve_least_squares(solution[0, :], n)],
+                           [solve_least_squares(solution[1, :], n)]])
 
-    traj = Bernstein(solution, tf=tf)
+    traj = Bernstein(cpts, tf=tf)
 
     return traj
 
