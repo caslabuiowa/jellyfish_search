@@ -146,6 +146,43 @@ def generate_apf_trajectory(x0, goal, obstacles,
 
     return traj
 
+
+def generate_piecewise_apf_trajectory(x0, goal, obstacles,
+                                      n=2, m=5, Katt_std=1, Krep_std=1, rho_std=1, d_obs=1, tf_max=60, t0=0, rng=None):
+    if rng is None:
+        rng = np.random.default_rng()
+
+    Katt, Krep, rho_0 = create_perturbed_parameters(Katt_std, Krep_std, rho_std, rng)
+
+    func_apf = FAPF(x0, obstacles, goal, Katt=Katt, Krep=Krep, rho_0=rho_0, d_obs=d_obs)
+
+    # Note that max step is important otherwise the solver will return a straight line
+    res = solve_ivp(func_apf.fn, (t0, tf_max), x0, method='LSODA', max_step=1e-1,
+                    events=func_apf.event, dense_output=True)
+    tf = res.t[-1]
+    # t = np.linspace(t0, tf, n*(m-1)+1) # *---*---*---*---* n=4, m=5
+    # sol = res.sol(t)
+    # print(f'{len(t)=}\n{len(sol[0, :])=}')
+    # fig, ax = plt.subplots()
+    trajs = []
+    for i in range(m):
+        t = np.linspace(t0 + i*(tf-t0)/m, t0 + (i+1)*(tf-t0)/m, n+1)
+        sol = res.sol(t)
+        cpts = np.concatenate([[sol[0, :]],
+                               [sol[1, :]]])
+        traj = Bernstein(cpts, t0=t[0], tf=t[-1])
+        trajs.append(traj)
+        # traj.plot(ax)
+    # t = np.linspace(t0, tf, 101)
+    # plt.plot(res.sol(t)[0, :], res.sol(t)[1, :])
+    # cpts = np.concatenate([[solve_least_squares(sol[0, :], n)],
+    #                        [solve_least_squares(sol[1, :], n)]])
+
+    # traj = Bernstein(cpts, t0=t0, tf=tf)
+
+    return trajs
+
+
 def create_perturbed_parameters(Katt_std, Krep_std, rho_std, rng):
     Katt = rng.lognormal(mean=1, sigma=Katt_std)
     Krep = rng.lognormal(mean=1, sigma=Krep_std)
@@ -234,3 +271,18 @@ if __name__ == '__main__':
     for obs in obstacles:
         artist = Circle(obs, radius=d_obs)
         ax.add_artist(artist)
+
+    pw_trajs = []
+    for i in range(100):
+        print(i)
+        pw_trajs.append(generate_piecewise_apf_trajectory(x0, goal, obstacles, d_obs=d_obs, rho_std=0.1,
+                                                          n=3, m=10, tf_max=600, rng=rng))
+
+    fig2, ax2 = plt.subplots()
+    for pw_traj in pw_trajs:
+        for traj in pw_traj:
+            traj.plot(ax2, showCpts=False)
+
+    for obs in obstacles:
+        artist = Circle(obs, radius=d_obs)
+        ax2.add_artist(artist)

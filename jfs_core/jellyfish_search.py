@@ -30,7 +30,7 @@ from lqr_search import generate_lqr_trajectory
 
 # TODO: Major refactoring required since the functions and objects are incredibly messy
 
-LOG_LEVEL = logging.DEBUG
+LOG_LEVEL = logging.WARNING
 logger = logging.getLogger(__name__)
 logger.setLevel(LOG_LEVEL)
 if len(logger.handlers) < 1:
@@ -39,7 +39,7 @@ if len(logger.handlers) < 1:
     logger.addHandler(stream_handler)
 
 
-DISABLE_CONSTRAINTS = False
+DISABLE_CONSTRAINTS = True
 
 
 class Worker:
@@ -140,10 +140,10 @@ class ProblemParameters:
 def is_feasible(traj, obstacles, safe_dist, vmax, wmax, rsafe):
     logger.debug('Inside is_feasible')
     constraints = [
-        # CollisionAvoidance(safe_dist, obstacles, elev=100),
-        # MaximumSpeed(vmax),
-        # MaximumAngularRate(wmax),
-        # SafeSphere(traj.cpts[:, 0].squeeze(), rsafe)
+        CollisionAvoidance(safe_dist, obstacles, elev=100),
+        MaximumSpeed(vmax),
+        MaximumAngularRate(wmax),
+        SafeSphere(traj.cpts[:, 0].squeeze(), rsafe)
     ]
 
     logger.debug('Starting feasibility check')
@@ -190,7 +190,7 @@ if __name__ == '__main__':
     t_max = 0.95
     n_trajectories = 1000
 
-    safe_planning_radius = 10
+    safe_planning_radius = 11
     safe_dist = 1
     vmax = 3
     wmax = np.pi/4
@@ -208,15 +208,15 @@ if __name__ == '__main__':
     initial_velocity = np.array([1, 0], dtype=float)
     initial_acceleration = np.array([0.1, 1], dtype=float)
 
-    cur_goal = project_goal(initial_position, safe_planning_radius, goal)
+    cur_goal = project_goal(initial_position, safe_planning_radius-1, goal)
     x0 = np.array([initial_position[0],
-                    initial_velocity[0],
-                    initial_acceleration[0],
-                    0,
+                   initial_velocity[0],
+                   initial_acceleration[0],
+                   0,
                    initial_position[1],
-                    initial_velocity[1],
-                    initial_acceleration[1],
-                    0
+                   initial_velocity[1],
+                   initial_acceleration[1],
+                   0
                    ], dtype=float)
     # x0 = initial_position
 
@@ -244,4 +244,4 @@ if __name__ == '__main__':
 
     fig2, ax2 = plt.subplots()
     for traj in trajs:
-        traj[0].normSquare().plot(ax2, showCpts=False)
+        traj[0].diff().normSquare().plot(ax2, showCpts=False)

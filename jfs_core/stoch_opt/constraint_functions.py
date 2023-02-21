@@ -60,7 +60,7 @@ class MaximumSpeed(ConstraintBase):
         for traj in trajs:
             speed = traj.diff().normSquare().elev(self.elev).cpts
 
-            if np.any(self.max_speed - speed < 0):
+            if np.any(self.max_speed**2 - speed < 0):
                 # print('[!] Maximum speed constraint infeasible.')
                 return False
 
