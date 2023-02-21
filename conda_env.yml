@@ -1,0 +1,12 @@
+name: bebot_jfs
+channels:
+  - defaults
+dependencies:
+  - matplotlib
+  - numba
+  - numpy
+  - pandas
+  - scipy
+  - spyder
+  - conda-forge::control
+  - conda-forge::numbalsoda
