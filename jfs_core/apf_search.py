@@ -39,90 +39,6 @@ if len(logger.handlers) < 1:
     logger.addHandler(stream_handler)
 
 
-# def generate_lqr_trajectory(x0, goal, Q_std, R_std, x0_std, tf, n=5, rng=None):
-#     if rng is None:
-#         rng = default_rng()
-
-#     logger.debug('Initializing LQR problem')
-#     A, B, Q, R = initialize_lqr_problem(Q_std, R_std, rng)
-#     logger.debug('Perturbing initial state')
-#     x0_perturbed = perturb_initial_state(x0, goal, x0_std, rng)
-
-#     logger.debug((f'{A=}\n'
-#                   f'{B=}\n'
-#                   f'{Q=}\n'
-#                   f'{R=}\n'
-#                   f'{x0=}\n'
-#                   f'{x0_perturbed=}'))
-
-#     traj = solve_lqr_problem(A, B, Q, R, x0_perturbed, n, tf, goal)
-
-#     return traj
-
-
-# def initialize_lqr_problem(Q_std, R_std, rng):
-#     A = np.array([[0, 1, 0, 0, 0, 0, 0, 0],
-#                   [0, 0, 1, 0, 0, 0, 0, 0],
-#                   [0, 0, 0, 1, 0, 0, 0, 0],
-#                   [0, 0, 0, 0, 0, 0, 0, 0],
-#                   [0, 0, 0, 0, 0, 1, 0, 0],
-#                   [0, 0, 0, 0, 0, 0, 1, 0],
-#                   [0, 0, 0, 0, 0, 0, 0, 1],
-#                   [0, 0, 0, 0, 0, 0, 0, 0]], dtype=float)
-#     B = np.array([[0, 0],
-#                   [0, 0],
-#                   [0, 0],
-#                   [1, 0],
-#                   [0, 0],
-#                   [0, 0],
-#                   [0, 0],
-#                   [0, 1]], dtype=float)
-
-#     Q = rng.normal(0, Q_std, (8, 8))
-#     R = rng.normal(0, R_std, (2, 2))
-#     Q = (0.5*Q.T@Q).round(6)
-#     R = (0.5*R.T@R).round(6)
-
-#     return A, B, Q, R
-
-
-# def perturb_initial_state(x0, goal, std, rng):
-#     x0_perturbed = x0.copy()
-#     # Subtract goal because the LQR controller tries to bring all states back to zero
-#     # Only perturb the position since we want to keep the higher order derivatives of the initial state constant
-#     # x0_perturbed += rng.normal([-goal[0], 0, 0, 0,
-#     #                             -goal[1], 0, 0, 0],
-#     #                            std)
-#     x0_perturbed[0] -= rng.normal(goal[0], std)
-#     x0_perturbed[4] -= rng.normal(goal[1])
-
-#     return x0_perturbed
-
-
-# def solve_lqr_problem(A, B, Q, R, x0, n, tf, goal):
-#     K, S, E = lqr(A, B, Q, R)
-
-#     usol, success = lsoda(fn.address, x0, np.linspace(0, tf, n+1), data=(A - B@K))
-
-#     logger.debug(f'{usol=}')
-#     cpts = np.concatenate([[usol[:, 0]],
-#                            [usol[:, 4]]], axis=0)
-#     cpts -= cpts[:, 0, np.newaxis]
-#     logger.debug(f'{cpts=}')
-#     traj = Bernstein(cpts, tf=tf)
-
-#     return traj
-
-
-# @cfunc(lsoda_sig)
-# def fn(t, u, du, p):
-#     u_ = carray(u, (8,))
-#     p_ = carray(p, (8, 8))
-#     tmp = p_@u_
-#     for i in range(8):
-#         du[i] = tmp[i]
-
-
 def generate_apf_trajectory(x0, goal, obstacles,
                             n=5, Katt_std=1, Krep_std=1, rho_std=1, d_obs=1, tf_max=60, t0=0, rng=None):
     if rng is None:
@@ -137,7 +53,6 @@ def generate_apf_trajectory(x0, goal, obstacles,
                     events=func_apf.event, dense_output=True)
     tf = res.t[-1]
     t = np.linspace(t0, tf, 2*n)
-    # cpts = res.sol(t)
     sol = res.sol(t)
     cpts = np.concatenate([[solve_least_squares(sol[0, :], n)],
                            [solve_least_squares(sol[1, :], n)]])
@@ -160,10 +75,6 @@ def generate_piecewise_apf_trajectory(x0, goal, obstacles,
     res = solve_ivp(func_apf.fn, (t0, tf_max), x0, method='LSODA', max_step=1e-1,
                     events=func_apf.event, dense_output=True)
     tf = res.t[-1]
-    # t = np.linspace(t0, tf, n*(m-1)+1) # *---*---*---*---* n=4, m=5
-    # sol = res.sol(t)
-    # print(f'{len(t)=}\n{len(sol[0, :])=}')
-    # fig, ax = plt.subplots()
     trajs = []
     for i in range(m):
         t = np.linspace(t0 + i*(tf-t0)/m, t0 + (i+1)*(tf-t0)/m, n+1)
@@ -172,13 +83,6 @@ def generate_piecewise_apf_trajectory(x0, goal, obstacles,
                                [sol[1, :]]])
         traj = Bernstein(cpts, t0=t[0], tf=t[-1])
         trajs.append(traj)
-        # traj.plot(ax)
-    # t = np.linspace(t0, tf, 101)
-    # plt.plot(res.sol(t)[0, :], res.sol(t)[1, :])
-    # cpts = np.concatenate([[solve_least_squares(sol[0, :], n)],
-    #                        [solve_least_squares(sol[1, :], n)]])
-
-    # traj = Bernstein(cpts, t0=t0, tf=tf)
 
     return trajs
 
@@ -251,10 +155,10 @@ if __name__ == '__main__':
                   np.array([80, -3], dtype=float),
                   np.array([30, -1], dtype=float)]
 
-    fapf = FAPF(x0, obstacles, goal, Katt=10, Krep=1, rho_0=0.1, d_obs=0.5)
-    res = solve_ivp(fapf.fn, (0, 60), x0, method='LSODA', max_step=1, events=fapf.event)
-    plt.figure()
-    plt.plot(res.y[0], res.y[1])
+    # fapf = FAPF(x0, obstacles, goal, Katt=10, Krep=1, rho_0=0.1, d_obs=0.5)
+    # res = solve_ivp(fapf.fn, (0, 60), x0, method='LSODA', max_step=1, events=fapf.event)
+    # plt.figure()
+    # plt.plot(res.y[0], res.y[1])
 
     # traj = generate_apf_trajectory(x0, goal, obstacles, n=n)
     # traj.plot(showCpts=True)

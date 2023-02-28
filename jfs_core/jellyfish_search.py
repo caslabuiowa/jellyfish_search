@@ -24,7 +24,7 @@ from stoch_opt.constraint_functions import CollisionAvoidance, MaximumSpeed, Max
 from stoch_opt.cost_functions import SumOfDistance
 from stoch_opt.utils import state2cpts
 
-from apf_search import generate_apf_trajectory
+from apf_search import generate_apf_trajectory, generate_piecewise_apf_trajectory
 from brachistochrone_search import generate_brachistochrone_trajectory
 from lqr_search import generate_lqr_trajectory
 
@@ -39,7 +39,7 @@ if len(logger.handlers) < 1:
     logger.addHandler(stream_handler)
 
 
-DISABLE_CONSTRAINTS = True
+DISABLE_CONSTRAINTS = False
 
 
 class Worker:
@@ -63,6 +63,36 @@ class Worker:
                 logger.debug('Assigning cost')
                 cost = cost_fn(temp_traj, self.solver_params['goal'])
                 bisect.insort(self.trajectories, (temp_traj, cost), key=lambda x: x[1])
+
+        self.running = False
+
+
+class PWWorker:
+    def __init__(self, trajectory_gen_fn, n_trajectories, obstacles, rsafe):
+        self.running = False
+        self.trajectories = []
+
+        self.generate_trajectory = trajectory_gen_fn
+        self.n_trajectories = n_trajectories
+        self.obstacles = obstacles
+        self.rsafe = rsafe
+        self.solver_params = {}
+
+    def do_work(self, safe_dist, vmax, wmax):
+        self.running = True
+        for i in range(self.n_trajectories):
+            print(f'Trajectory {i}')
+            temp_pw_traj = self.generate_trajectory()
+            logger.debug('Checking feasibility')
+
+            traj_feasibility = []
+            for traj in temp_pw_traj:
+                traj_feasibility.append(is_feasible(traj, self.obstacles, safe_dist, vmax, wmax, self.rsafe))
+
+            if np.all(traj_feasibility) or DISABLE_CONSTRAINTS:
+                logger.debug('Assigning cost')
+                cost = sum([cost_fn(traj, self.solver_params['goal']) for traj in temp_pw_traj])
+                bisect.insort(self.trajectories, (temp_pw_traj, cost), key=lambda x: x[1])
 
         self.running = False
 
@@ -112,10 +142,21 @@ class JellyfishController:
                                                tf_max=600,
                                                n=self.n,
                                                rng=self.rng)
+            elif solver_method.lower() == 'apf_pw':
+                return generate_piecewise_apf_trajectory(solver_params['x0'],
+                                                         solver_params['goal'],
+                                                         solver_params['obstacles'],
+                                                         rho_std=0.1,
+                                                         tf_max=600,
+                                                         n=self.n,
+                                                         rng=self.rng)
             else:
                 raise ValueError('Incorrect solver method.')
 
-        self.worker = Worker(trajectory_gen_fn, self.n_trajectories, self.obstacles, self.safe_planning_radius)
+        if solver_method.lower() == 'apf_pw':
+            self.worker = PWWorker(trajectory_gen_fn, self.n_trajectories, self.obstacles, self.safe_planning_radius)
+        else:
+            self.worker = Worker(trajectory_gen_fn, self.n_trajectories, self.obstacles, self.safe_planning_radius)
         self.worker.solver_params = solver_params
         self.worker.do_work(self.safe_dist, self.vmax, self.wmax)
 
@@ -210,17 +251,17 @@ if __name__ == '__main__':
 
     cur_goal = project_goal(initial_position, safe_planning_radius-1, goal)
     x0 = np.array([initial_position[0],
-                   initial_velocity[0],
-                   initial_acceleration[0],
-                   0,
+                   # initial_velocity[0],
+                   # initial_acceleration[0],
+                   # 0,
                    initial_position[1],
-                   initial_velocity[1],
-                   initial_acceleration[1],
-                   0
+                   # initial_velocity[1],
+                   # initial_acceleration[1],
+                   # 0
                    ], dtype=float)
     # x0 = initial_position
 
-    solver_params = {'method': 'lqr',
+    solver_params = {'method': 'apf_pw',
                      'x0': x0,
                      'goal': cur_goal,
                      'tf': tf,
@@ -235,13 +276,23 @@ if __name__ == '__main__':
 
     plt.close('all')
     fig, ax = plt.subplots()
-    for traj in trajs:
-        traj[0].plot(ax, showCpts=False)
+    if solver_params['method'] == 'apf_pw':
+        for pw_traj in trajs:
+            for traj in pw_traj[0]:
+                traj.plot(ax, showCpts=False)
+    else:
+        for traj in trajs:
+            traj[0].plot(ax, showCpts=False)
 
     for obs in obstacles:
         artist = Circle(obs, radius=safe_dist)
         ax.add_artist(artist)
 
     fig2, ax2 = plt.subplots()
-    for traj in trajs:
-        traj[0].diff().normSquare().plot(ax2, showCpts=False)
+    if solver_params['method'] == 'apf_pw':
+        for pw_traj in trajs:
+            for traj in pw_traj[0]:
+                traj.diff().normSquare().plot(ax2, showCpts=False)
+    else:
+        for traj in trajs:
+            traj[0].diff().normSquare().plot(ax2, showCpts=False)
