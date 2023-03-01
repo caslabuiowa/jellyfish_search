@@ -164,8 +164,6 @@ class JellyfishController:
         return self.worker.trajectories
 
 
-# TODO: create and integrate the solver and problem parameters classes instead of using a dictionary
-# TODO: streamline the locations where parameters are input to the problem
 @dataclass
 class SolverParameters:
     method: str
@@ -189,19 +187,35 @@ class ProblemParameters:
     safe_planning_radius: float
 
 
-def generate_jellyfish_trajectory(problem_parameters: ProblemParameters, solver_parameters: SolverParameters,
-                                  debug=False):
+def generate_jellyfish_trajectories(problem_parameters: ProblemParameters,
+                                    solver_parameters: SolverParameters,
+                                    debug=False):
+    """Generate a family of trajectories using the jellyfish search approach
 
+    Parameters
+    ----------
+    problem_parameters : ProblemParameters
+        DESCRIPTION.
+    solver_parameters : SolverParameters
+        DESCRIPTION.
+    debug : TYPE, optional
+        DESCRIPTION. The default is False.
 
+    Returns
+    -------
+    trajectories : TYPE
+        DESCRIPTION.
 
+    """
     seed_seq = SeedSequence(solver_parameters.rng_seed)
     rng_seeds = seed_seq.spawn(solver_parameters.trajectory_count)
     with Pool(solver_parameters.process_count) as pool:
-        # trajectories = pool.map(function_wrapper, rng_seeds)
         trajectories = pool.starmap(function_wrapper, zip(rng_seeds,
                                                           [problem_parameters]*len(rng_seeds),
                                                           [solver_parameters]*len(rng_seeds),
                                                           [debug]*len(rng_seeds)))
+
+    trajectories.sort(key=lambda x: x[1])
 
     return trajectories
 
@@ -356,13 +370,15 @@ if __name__ == '__main__':
                                        safe_planning_radius)
 
     tik = time.time()
-    traj_list = generate_jellyfish_trajectory(problem_params, solver_params)
+    traj_list = generate_jellyfish_trajectories(problem_params, solver_params)
     print(f'Elapsed time: {time.time() - tik} s')
 
     plt.close('all')
     fig, ax = plt.subplots()
     fig2, ax2 = plt.subplots()
-    for traj in traj_list:
+    traj_list[0][0].plot(ax, showCpts=False, color='b')
+    traj_list[0][0].diff().normSquare().plot(ax2, showCpts=False, color='b')
+    for traj in traj_list[1:]:
         if traj[1] < np.inf:
             traj[0].plot(ax, showCpts=False, color='g', alpha=0.5)
             traj[0].diff().normSquare().plot(ax2, showCpts=False, color='g')
