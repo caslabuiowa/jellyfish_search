@@ -9,6 +9,7 @@ Created on Tue Dec 20 12:01:18 2022
 import bisect
 from dataclasses import dataclass
 import logging
+from multiprocessing import Pool
 
 from control import lqr
 import matplotlib.pyplot as plt
@@ -16,7 +17,7 @@ from matplotlib.patches import Circle
 from numba import cfunc, carray
 from numbalsoda import lsoda_sig, lsoda
 import numpy as np
-from numpy.random import default_rng
+from numpy.random import SeedSequence, default_rng
 from numpy.typing import ArrayLike
 
 from polynomial.bernstein import Bernstein
@@ -168,14 +169,91 @@ class JellyfishController:
 @dataclass
 class SolverParameters:
     method: str
+    params: dict
+    trajectory_count: int
+    rng_seed: int | None = None
+    process_count: int | None = None
 
 
 @dataclass
 class ProblemParameters:
+    n: int
+    ndim: int
     x0: ArrayLike
     goal: ArrayLike
     tf: float
     obstacles: ArrayLike
+    safe_distance: float
+    maximum_speed: float
+    maximum_angular_rate: float
+    safe_planning_radius: float
+
+
+def generate_jellyfish_trajectory(problem_parameters: ProblemParameters, solver_parameters: SolverParameters,
+                                  debug=False):
+
+
+
+    seed_seq = SeedSequence(solver_parameters.rng_seed)
+    rng_seeds = seed_seq.spawn(solver_parameters.trajectory_count)
+    with Pool(solver_parameters.process_count) as pool:
+        # trajectories = pool.map(function_wrapper, rng_seeds)
+        trajectories = pool.starmap(function_wrapper, zip(rng_seeds,
+                                                          [problem_parameters]*len(rng_seeds),
+                                                          [solver_parameters]*len(rng_seeds),
+                                                          [debug]*len(rng_seeds)))
+
+    return trajectories
+
+
+def function_wrapper(rng_sequence_seed, problem_parameters, solver_parameters, debug):
+    traj = _trajectory_gen_fn(rng_sequence_seed, problem_parameters, solver_parameters, debug)
+    cost = _assess_trajectory(traj, problem_parameters)
+    return (traj, cost)
+
+
+def _trajectory_gen_fn(rng_sequence_seed, problem_parameters, solver_parameters, debug):
+    rng = default_rng(rng_sequence_seed)
+
+    solver_method = solver_parameters.method.lower()
+    if solver_method == 'apf':
+        return generate_apf_trajectory(problem_parameters.x0,
+                                       problem_parameters.goal,
+                                       problem_parameters.obstacles,
+                                       rho_std=solver_parameters.params['rho_std'],
+                                       tf_max=solver_parameters.params['tf_max'],
+                                       n=problem_parameters.n,
+                                       rng=rng)
+    elif solver_method == 'apf_pw':
+        pass
+    elif solver_method == 'brachistochrone':
+        pass
+    elif solver_method == 'lqr':
+        return generate_lqr_trajectory(problem_parameters.x0,
+                                       problem_parameters.goal,
+                                       solver_parameters.params['Q_std'],
+                                       solver_parameters.params['R_std'],
+                                       solver_parameters.params['x0_std'],
+                                       problem_parameters.tf,
+                                       n=problem_parameters.n,
+                                       rng=rng)
+    else:
+        raise ValueError('Incorrect solver method.')
+
+
+def _assess_trajectory(traj, problem_parameters:ProblemParameters):
+    obstacles = problem_parameters.obstacles
+    safe_dist = problem_parameters.safe_distance
+    vmax = problem_parameters.maximum_speed
+    wmax = problem_parameters.maximum_angular_rate
+    rsafe = problem_parameters.safe_planning_radius
+
+    if is_feasible(traj, obstacles, safe_dist, vmax, wmax, rsafe):
+        cost = cost_fn(traj, goal)
+    else:
+        cost = np.inf
+
+    return cost
 
 
 def is_feasible(traj, obstacles, safe_dist, vmax, wmax, rsafe):
@@ -218,6 +296,7 @@ def project_goal(x, rsafe, goal):
 
 
 if __name__ == '__main__':
+    import time
     seed = 3
     Q_std = 1000
     R_std = 1000
@@ -232,9 +311,9 @@ if __name__ == '__main__':
     n_trajectories = 1000
 
     safe_planning_radius = 11
-    safe_dist = 1
-    vmax = 3
-    wmax = np.pi/4
+    safe_distance = 1
+    maximum_speed = 3
+    maximum_angular_rate = np.pi/4
 
     obstacles = [np.array([5, 0], dtype=float),  # Obstacle positions (m)
                  np.array([20, 2], dtype=float),
@@ -261,38 +340,74 @@ if __name__ == '__main__':
                    ], dtype=float)
     # x0 = initial_position
 
-    solver_params = {'method': 'apf_pw',
-                     'x0': x0,
-                     'goal': cur_goal,
-                     'tf': tf,
-                     'Q_std': Q_std,
-                     'R_std': R_std,
-                     'x0_std': x0_std,
-                     'obstacles': obstacles}
+    solver_params = SolverParameters('apf',
+                                     {'rho_std': 0.1,
+                                      'tf_max': 600},
+                                     n_trajectories)
+    problem_params = ProblemParameters(n,
+                                       ndim,
+                                       x0,
+                                       cur_goal,
+                                       tf,
+                                       obstacles,
+                                       safe_distance,
+                                       maximum_speed,
+                                       maximum_angular_rate,
+                                       safe_planning_radius)
 
-    jfc = JellyfishController(n, ndim, tf, obstacles, safe_dist, vmax, wmax, safe_planning_radius, t_max,
-                              n_trajectories, rng_seed=seed)
-    trajs = jfc.run_worker(solver_params)
+    tik = time.time()
+    traj_list = generate_jellyfish_trajectory(problem_params, solver_params)
+    print(f'Elapsed time: {time.time() - tik} s')
 
     plt.close('all')
     fig, ax = plt.subplots()
-    if solver_params['method'] == 'apf_pw':
-        for pw_traj in trajs:
-            for traj in pw_traj[0]:
-                traj.plot(ax, showCpts=False)
-    else:
-        for traj in trajs:
-            traj[0].plot(ax, showCpts=False)
+    fig2, ax2 = plt.subplots()
+    for traj in traj_list:
+        if traj[1] < np.inf:
+            traj[0].plot(ax, showCpts=False, color='g', alpha=0.5)
+            traj[0].diff().normSquare().plot(ax2, showCpts=False, color='g')
+        else:
+            traj[0].plot(ax, showCpts=False, color='r', alpha=0.2)
+            traj[0].diff().normSquare().plot(ax2, showCpts=False, color='r')
+    ax.set_title('Trajectories')
+    ax2.set_title('Trajectories\' Speed Squared')
 
     for obs in obstacles:
-        artist = Circle(obs, radius=safe_dist)
+        artist = Circle(obs, radius=safe_distance)
         ax.add_artist(artist)
 
-    fig2, ax2 = plt.subplots()
-    if solver_params['method'] == 'apf_pw':
-        for pw_traj in trajs:
-            for traj in pw_traj[0]:
-                traj.diff().normSquare().plot(ax2, showCpts=False)
-    else:
-        for traj in trajs:
-            traj[0].diff().normSquare().plot(ax2, showCpts=False)
+    # solver_params = {'method': 'apf_pw',
+    #                  'x0': x0,
+    #                  'goal': cur_goal,
+    #                  'tf': tf,
+    #                  'Q_std': Q_std,
+    #                  'R_std': R_std,
+    #                  'x0_std': x0_std,
+    #                  'obstacles': obstacles}
+
+    # jfc = JellyfishController(n, ndim, tf, obstacles, safe_dist, vmax, wmax, safe_planning_radius, t_max,
+    #                           n_trajectories, rng_seed=seed)
+    # trajs = jfc.run_worker(solver_params)
+
+    # plt.close('all')
+    # fig, ax = plt.subplots()
+    # if solver_params['method'] == 'apf_pw':
+    #     for pw_traj in trajs:
+    #         for traj in pw_traj[0]:
+    #             traj.plot(ax, showCpts=False)
+    # else:
+    #     for traj in trajs:
+    #         traj[0].plot(ax, showCpts=False)
+
+    # for obs in obstacles:
+    #     artist = Circle(obs, radius=safe_dist)
+    #     ax.add_artist(artist)
+
+    # fig2, ax2 = plt.subplots()
+    # if solver_params['method'] == 'apf_pw':
+    #     for pw_traj in trajs:
+    #         for traj in pw_traj[0]:
+    #             traj.diff().normSquare().plot(ax2, showCpts=False)
+    # else:
+    #     for traj in trajs:
+    #         traj[0].diff().normSquare().plot(ax2, showCpts=False)
