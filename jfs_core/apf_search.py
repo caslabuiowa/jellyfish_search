@@ -21,13 +21,13 @@ import logging
 from control import lqr
 import matplotlib.pyplot as plt
 from matplotlib.patches import Circle
-from numba import cfunc, carray
+from numba import cfunc, carray, njit
 from numbalsoda import lsoda_sig, lsoda
 import numpy as np
 from numpy.random import default_rng
 from scipy.integrate import solve_ivp
 
-from bernstein_solvers.bernstein_least_squares import solve_least_squares
+from jellyfish_search.bernstein_solvers.bernstein_least_squares import solve_least_squares
 from polynomial.bernstein import Bernstein
 
 LOG_LEVEL = logging.WARN
@@ -49,8 +49,13 @@ def generate_apf_trajectory(x0, goal, obstacles,
     func_apf = FAPF(x0, obstacles, goal, Katt=Katt, Krep=Krep, rho_0=rho_0, d_obs=d_obs)
 
     # Note that max step is important otherwise the solver will return a straight line
-    res = solve_ivp(func_apf.fn, (t0, tf_max), x0, method='LSODA', max_step=1e-1,
-                    events=func_apf.event, dense_output=True)
+    try:
+        res = solve_ivp(func_apf.fn, (t0, tf_max), x0, max_step=1e-1,
+                        events=func_apf.event, dense_output=True)
+        # usol, success = lsoda(func_apf.fn.address, np.linspace(0, 60, 101))
+    except ValueError as e:
+        print(f'{Katt=}\n{Krep=}\n{rho_0=}\n{t0=}\n{tf_max=}\n{x0=}')
+        raise e
     tf = res.t[-1]
     t = np.linspace(t0, tf, 2*n)
     sol = res.sol(t)
@@ -107,23 +112,7 @@ class FAPF:
         self.t0 = t0
 
     def fn(self, t, x):
-        norm = np.linalg.norm(x - self.goal)
-        # print(f'{norm=}')
-        u_att_x = self.Katt*(x[0] - self.goal[0]) / norm
-        u_att_y = self.Katt*(x[1] - self.goal[1]) / norm
-
-        u_rep_x = 0
-        u_rep_y = 0
-        for obs in self.obstacles:
-            rho_x = np.linalg.norm(x - obs) - self.d_obs
-            if rho_x <= self.rho_0:
-                # gain = (self.Krep/rho_x**3) * (1 - rho_x/self.rho_0)
-                gain = -self.Krep*(self.rho_0 - rho_x) / (self.rho_0*rho_x**4)
-                u_rep_x += gain*(x[0] - obs[0])
-                u_rep_y += gain*(x[1] - obs[1])
-
-        return np.array([-u_att_x - u_rep_x,
-                         -u_att_y - u_rep_y])
+        return _fapf_fn(t, x, self.goal, tuple(self.obstacles), self.d_obs, self.Katt, self.Krep, self.rho_0)
 
     def event(self, t, x):
         distance = np.linalg.norm(x - self.goal)
@@ -134,6 +123,26 @@ class FAPF:
         return distance
 
     event.terminal = True  # Required for the integration to stop early
+
+
+@njit(cache=True)
+def _fapf_fn(t, x, goal, obstacles, d_obs, Katt, Krep, rho_0):
+    norm = np.linalg.norm(x - goal)
+    u_att_x = Katt*(x[0] - goal[0]) / norm
+    u_att_y = Katt*(x[1] - goal[1]) / norm
+
+    u_rep_x = 0
+    u_rep_y = 0
+    for obs in obstacles:
+        rho_x = np.linalg.norm(x - obs) - d_obs
+        if rho_x <= rho_0:
+            # gain = (self.Krep/rho_x**3) * (1 - rho_x/self.rho_0)
+            gain = -Krep*(rho_0 - rho_x) / (rho_0*rho_x**4)
+            u_rep_x += gain*(x[0] - obs[0])
+            u_rep_y += gain*(x[1] - obs[1])
+
+    return np.array([-u_att_x - u_rep_x,
+                     -u_att_y - u_rep_y])
 
 
 if __name__ == '__main__':

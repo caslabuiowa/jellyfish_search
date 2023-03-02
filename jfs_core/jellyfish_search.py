@@ -18,15 +18,16 @@ import time
 import numpy as np
 from numpy.random import SeedSequence, default_rng
 from numpy.typing import ArrayLike
+from viztracer import log_sparse
 
 # from polynomial.bernstein import Bernstein
-from stoch_opt.constraint_functions import CollisionAvoidance, MaximumSpeed, MaximumAngularRate, SafeSphere
-from stoch_opt.cost_functions import SumOfDistance
+from jfs_core.stoch_opt.constraint_functions import CollisionAvoidance, MaximumSpeed, MaximumAngularRate, SafeSphere
+from jfs_core.stoch_opt.cost_functions import SumOfDistance
 # from stoch_opt.utils import state2cpts
 
-from apf_search import generate_apf_trajectory, generate_piecewise_apf_trajectory
-from brachistochrone_search import generate_brachistochrone_trajectory
-from lqr_search import generate_lqr_trajectory
+from jfs_core.apf_search import generate_apf_trajectory, generate_piecewise_apf_trajectory
+from jfs_core.brachistochrone_search import generate_brachistochrone_trajectory
+from jfs_core.lqr_search import generate_lqr_trajectory
 
 LOG_LEVEL = logging.WARNING
 logger = logging.getLogger(__name__)
@@ -257,6 +258,7 @@ def generate_jellyfish_trajectories_timeout(problem_parameters: ProblemParameter
     return trajectories
 
 
+@log_sparse
 def function_wrapper(rng_sequence_seed, problem_parameters, solver_parameters, debug):
     traj = _trajectory_gen_fn(rng_sequence_seed, problem_parameters, solver_parameters, debug)
     cost = _assess_trajectory(traj, problem_parameters)
@@ -279,6 +281,8 @@ def _trajectory_gen_fn(rng_sequence_seed, problem_parameters, solver_parameters,
                                        problem_parameters.goal,
                                        problem_parameters.obstacles,
                                        rho_std=solver_parameters.params['rho_std'],
+                                       Katt_std=solver_parameters.params['Katt_std'],
+                                       Krep_std=solver_parameters.params['Krep_std'],
                                        tf_max=solver_parameters.params['tf_max'],
                                        n=problem_parameters.n,
                                        rng=rng)
@@ -305,6 +309,7 @@ def _assess_trajectory(traj, problem_parameters:ProblemParameters):
     vmax = problem_parameters.maximum_speed
     wmax = problem_parameters.maximum_angular_rate
     rsafe = problem_parameters.safe_planning_radius
+    goal = problem_parameters.goal
 
     if is_feasible(traj, obstacles, safe_dist, vmax, wmax, rsafe):
         cost = cost_fn(traj, goal)

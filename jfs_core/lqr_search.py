@@ -19,7 +19,7 @@ import numpy as np
 from numpy.random import default_rng
 
 from polynomial.bernstein import Bernstein
-from bernstein_solvers.bernstein_least_squares import solve_least_squares
+from jellyfish_search.bernstein_solvers.bernstein_least_squares import solve_least_squares
 
 LOG_LEVEL = logging.WARN
 logger = logging.getLogger(__name__)

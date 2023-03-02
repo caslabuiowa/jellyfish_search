@@ -16,7 +16,7 @@ from scipy.optimize import minimize, Bounds, newton, toms748
 import timeit
 
 from polynomial.bernstein import Bernstein
-from bernstein_solvers.bernstein_least_squares import solve_least_squares
+from jellyfish_search.bernstein_solvers.bernstein_least_squares import solve_least_squares
 
 
 def generate_brachistochrone_trajectory(x0, goal, R_std, n=5, rng=None):
