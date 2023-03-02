@@ -45,24 +45,32 @@ def generate_apf_trajectory(x0, goal, obstacles,
         rng = np.random.default_rng()
 
     Katt, Krep, rho_0 = create_perturbed_parameters(Katt_std, Krep_std, rho_std, rng)
+    fn = make_lsoda_fn(goal, tuple(obstacles), d_obs, Katt, Krep, rho_0)
 
-    func_apf = FAPF(x0, obstacles, goal, Katt=Katt, Krep=Krep, rho_0=rho_0, d_obs=d_obs)
+    # func_apf = FAPF(x0, obstacles, goal, Katt=Katt, Krep=Krep, rho_0=rho_0, d_obs=d_obs)
 
     # Note that max step is important otherwise the solver will return a straight line
     try:
-        res = solve_ivp(func_apf.fn, (t0, tf_max), x0, max_step=1e-1,
-                        events=func_apf.event, dense_output=True)
-        # usol, success = lsoda(func_apf.fn.address, np.linspace(0, 60, 101))
+        # res = solve_ivp(func_apf.fn, (t0, tf_max), x0, max_step=1e-1,
+        #                 events=func_apf.event, dense_output=True)
+        # data = (goal, tuple(obstacles), d_obs, Katt, Krep, rho_0)
+        usol, success = lsoda(fn.address, x0, np.linspace(0, 60, 1001))
     except ValueError as e:
         print(f'{Katt=}\n{Krep=}\n{rho_0=}\n{t0=}\n{tf_max=}\n{x0=}')
         raise e
-    tf = res.t[-1]
-    t = np.linspace(t0, tf, 2*n)
-    sol = res.sol(t)
-    cpts = np.concatenate([[solve_least_squares(sol[0, :], n)],
-                           [solve_least_squares(sol[1, :], n)]])
+    # tf = res.t[-1]
+    # t = np.linspace(t0, tf, 2*n)
+    # sol = res.sol(t)
+    # cpts = np.concatenate([[solve_least_squares(sol[0, :], n)],
+    #                        [solve_least_squares(sol[1, :], n)]])
 
-    traj = Bernstein(cpts, t0=t0, tf=tf)
+    for idx, pt in enumerate(usol):
+        if np.linalg.norm(pt - goal) < 1e-3:
+            break
+
+    cpts = usol[:, :idx].T
+
+    traj = Bernstein(cpts, t0=0, tf=60)
 
     return traj
 
@@ -143,6 +151,30 @@ def _fapf_fn(t, x, goal, obstacles, d_obs, Katt, Krep, rho_0):
 
     return np.array([-u_att_x - u_rep_x,
                      -u_att_y - u_rep_y])
+
+
+def make_lsoda_fn(goal, obstacles, d_obs, Katt, Krep, rho_0):
+    @cfunc(lsoda_sig)
+    def _fapf_fn_lsoda(t, x_, dx, _):
+        x = carray(x_, (2,))
+        norm = np.linalg.norm(x - goal)
+        u_att_x = Katt*(x[0] - goal[0]) / norm
+        u_att_y = Katt*(x[1] - goal[1]) / norm
+
+        u_rep_x = 0
+        u_rep_y = 0
+        for obs in obstacles:
+            rho_x = np.linalg.norm(x - obs) - d_obs
+            if rho_x <= rho_0:
+                # gain = (self.Krep/rho_x**3) * (1 - rho_x/self.rho_0)
+                gain = -Krep*(rho_0 - rho_x) / (rho_0*rho_x**4)
+                u_rep_x += gain*(x[0] - obs[0])
+                u_rep_y += gain*(x[1] - obs[1])
+
+        dx[0] = -u_att_x - u_rep_x
+        dx[1] = -u_att_y - u_rep_y
+
+    return _fapf_fn_lsoda
 
 
 if __name__ == '__main__':
