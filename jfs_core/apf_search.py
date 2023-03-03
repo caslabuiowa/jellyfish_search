@@ -12,7 +12,7 @@ Created on Tue Dec 20 13:31:49 2022
 
 @author: magicbycalvin
 """
-
+import time
 import sys
 sys.path.append('..')
 
@@ -39,6 +39,45 @@ if len(logger.handlers) < 1:
     logger.addHandler(stream_handler)
 
 
+# def generate_apf_trajectory(x0, goal, obstacles,
+#                             n=5, Katt_std=1, Krep_std=1, rho_std=1, d_obs=1, tf_max=60, t0=0, rng=None):
+#     if rng is None:
+#         rng = np.random.default_rng()
+
+#     Katt, Krep, rho_0 = create_perturbed_parameters(Katt_std, Krep_std, rho_std, rng)
+#     fn = make_lsoda_fn(goal, tuple(obstacles), d_obs, Katt, Krep, rho_0)
+
+#     # func_apf = FAPF(x0, obstacles, goal, Katt=Katt, Krep=Krep, rho_0=rho_0, d_obs=d_obs)
+
+#     # Note that max step is important otherwise the solver will return a straight line
+#     try:
+#         # res = solve_ivp(func_apf.fn, (t0, tf_max), x0, max_step=1e-1,
+#         #                 events=func_apf.event, dense_output=True)
+#         # data = (goal, tuple(obstacles), d_obs, Katt, Krep, rho_0)
+#         t_eval = np.linspace(0, 20, 200)
+#         usol, success = lsoda(fn.address, x0, t_eval)
+#     except ValueError as e:
+#         print(f'{Katt=}\n{Krep=}\n{rho_0=}\n{t0=}\n{tf_max=}\n{x0=}')
+#         raise e
+#     # tf = res.t[-1]
+#     # t = np.linspace(t0, tf, 2*n)
+#     # sol = res.sol(t)
+#     # cpts = np.concatenate([[solve_least_squares(sol[0, :], n)],
+#     #                        [solve_least_squares(sol[1, :], n)]])
+
+#     for idx, pt in enumerate(usol):
+#         if np.linalg.norm(pt - goal) < 1e-3:
+#             break
+
+#     # print(f'{idx=}')
+#     cpt_indices = [round(i) for i in np.linspace(0, idx, n)]
+#     cpts = usol[cpt_indices, :].T
+
+#     traj = Bernstein(cpts, t0=0, tf=t_eval[idx])
+
+#     return traj
+
+
 def generate_apf_trajectory(x0, goal, obstacles,
                             n=5, Katt_std=1, Krep_std=1, rho_std=1, d_obs=1, tf_max=60, t0=0, rng=None):
     if rng is None:
@@ -47,30 +86,16 @@ def generate_apf_trajectory(x0, goal, obstacles,
     Katt, Krep, rho_0 = create_perturbed_parameters(Katt_std, Krep_std, rho_std, rng)
     fn = make_lsoda_fn(goal, tuple(obstacles), d_obs, Katt, Krep, rho_0)
 
-    # func_apf = FAPF(x0, obstacles, goal, Katt=Katt, Krep=Krep, rho_0=rho_0, d_obs=d_obs)
+    func_apf = FAPF(x0, obstacles, goal, Katt=Katt, Krep=Krep, rho_0=rho_0, d_obs=d_obs)
 
-    # Note that max step is important otherwise the solver will return a straight line
-    try:
-        # res = solve_ivp(func_apf.fn, (t0, tf_max), x0, max_step=1e-1,
-        #                 events=func_apf.event, dense_output=True)
-        # data = (goal, tuple(obstacles), d_obs, Katt, Krep, rho_0)
-        usol, success = lsoda(fn.address, x0, np.linspace(0, 60, 1001))
-    except ValueError as e:
-        print(f'{Katt=}\n{Krep=}\n{rho_0=}\n{t0=}\n{tf_max=}\n{x0=}')
-        raise e
-    # tf = res.t[-1]
-    # t = np.linspace(t0, tf, 2*n)
-    # sol = res.sol(t)
-    # cpts = np.concatenate([[solve_least_squares(sol[0, :], n)],
-    #                        [solve_least_squares(sol[1, :], n)]])
+    n_steps = 200
+    res = solve_ivp_euler(func_apf.fn, x0, t0, 20, n_steps)
+    cpt_indices = [round(i) for i in np.linspace(0, n_steps, n)]
+    cpts = res[cpt_indices, :].T
+    t0 = 0
+    tf = 20
 
-    for idx, pt in enumerate(usol):
-        if np.linalg.norm(pt - goal) < 1e-3:
-            break
-
-    cpts = usol[:, :idx].T
-
-    traj = Bernstein(cpts, t0=0, tf=60)
+    traj = Bernstein(cpts, t0=0, tf=tf)
 
     return traj
 
@@ -133,8 +158,9 @@ class FAPF:
     event.terminal = True  # Required for the integration to stop early
 
 
-@njit(cache=True)
+# @njit(cache=True)
 def _fapf_fn(t, x, goal, obstacles, d_obs, Katt, Krep, rho_0):
+    # print(f'{Katt=}, {Krep=}')
     norm = np.linalg.norm(x - goal)
     u_att_x = Katt*(x[0] - goal[0]) / norm
     u_att_y = Katt*(x[1] - goal[1]) / norm
@@ -146,6 +172,7 @@ def _fapf_fn(t, x, goal, obstacles, d_obs, Katt, Krep, rho_0):
         if rho_x <= rho_0:
             # gain = (self.Krep/rho_x**3) * (1 - rho_x/self.rho_0)
             gain = -Krep*(rho_0 - rho_x) / (rho_0*rho_x**4)
+
             u_rep_x += gain*(x[0] - obs[0])
             u_rep_y += gain*(x[1] - obs[1])
 
@@ -166,15 +193,27 @@ def make_lsoda_fn(goal, obstacles, d_obs, Katt, Krep, rho_0):
         for obs in obstacles:
             rho_x = np.linalg.norm(x - obs) - d_obs
             if rho_x <= rho_0:
+
                 # gain = (self.Krep/rho_x**3) * (1 - rho_x/self.rho_0)
                 gain = -Krep*(rho_0 - rho_x) / (rho_0*rho_x**4)
                 u_rep_x += gain*(x[0] - obs[0])
                 u_rep_y += gain*(x[1] - obs[1])
 
+
         dx[0] = -u_att_x - u_rep_x
         dx[1] = -u_att_y - u_rep_y
 
     return _fapf_fn_lsoda
+
+
+# @njit(cache=True)
+def solve_ivp_euler(fn, x0, t0, tf, n_steps, terminal_fn=None):
+    dt = (tf - t0) / n_steps
+    x = [x0]
+    for t in np.linspace(t0, tf, n_steps):
+        x.append(fn(t, x[-1])*dt + x[-1])
+
+    return np.array(x)
 
 
 if __name__ == '__main__':
@@ -183,20 +222,21 @@ if __name__ == '__main__':
     rng = default_rng(seed)
 
     n = 10
-    d_obs = 0.5
-    goal = np.array([100, 0], dtype=float)
+    d_obs = 1
+    goal = np.array([15, 0], dtype=float)
     x0 = np.array([0.1, 0.1], dtype=float)
     obstacles = [np.array([1, 2], dtype=float),  # Obstacle positions (m)
                  np.array([2.5, 3], dtype=float)]
     obstacles = [np.array([8, 0], dtype=float),  # Obstacle positions (m)
-                  np.array([20, 2], dtype=float),
-                  np.array([60, 1], dtype=float),
-                  np.array([40, 2], dtype=float),
-                  np.array([50, -3], dtype=float),
-                  np.array([80, -3], dtype=float),
-                  np.array([30, -1], dtype=float)]
+                  # np.array([20, 2], dtype=float),
+                  # np.array([60, 1], dtype=float),
+                  # np.array([40, 2], dtype=float),
+                  # np.array([50, -3], dtype=float),
+                  # np.array([80, -3], dtype=float),
+                  # np.array([30, -1], dtype=float)
+                  ]
 
-    # fapf = FAPF(x0, obstacles, goal, Katt=10, Krep=1, rho_0=0.1, d_obs=0.5)
+    fapf = FAPF(x0, obstacles, goal, Katt=1, Krep=1e-1, rho_0=100, d_obs=d_obs)
     # res = solve_ivp(fapf.fn, (0, 60), x0, method='LSODA', max_step=1, events=fapf.event)
     # plt.figure()
     # plt.plot(res.y[0], res.y[1])
@@ -204,30 +244,39 @@ if __name__ == '__main__':
     # traj = generate_apf_trajectory(x0, goal, obstacles, n=n)
     # traj.plot(showCpts=True)
 
-    trajs = []
-    for i in range(100):
-        print(i)
-        trajs.append(generate_apf_trajectory(x0, goal, obstacles, n=n, d_obs=d_obs, rho_std=0.1, tf_max=600, rng=rng))
-
+    plt.close('all')
+    tstart = time.time()
+    traj = solve_ivp_euler(fapf.fn, x0, 0, 20, 20000)
+    print(f'Elapsed time: {time.time() - tstart}')
     fig, ax = plt.subplots()
-    for traj in trajs:
-        traj.plot(ax, showCpts=False)
+    ax.plot(traj[:, 0], traj[:, 1])
+
+    # trajs = []
+    # for i in range(100):
+    #     print(i)
+    #     trajs.append(generate_apf_trajectory(x0, goal, obstacles, n=n, d_obs=d_obs, rho_std=0.1, tf_max=600, rng=rng))
+
+    # fig, ax = plt.subplots()
+    # for traj in trajs:
+    #     traj.plot(ax, showCpts=False)
 
     for obs in obstacles:
         artist = Circle(obs, radius=d_obs)
         ax.add_artist(artist)
+    plt.ylim([-5, 5])
+    plt.xlim([-3, 18])
 
-    pw_trajs = []
-    for i in range(100):
-        print(i)
-        pw_trajs.append(generate_piecewise_apf_trajectory(x0, goal, obstacles, d_obs=d_obs, rho_std=0.1,
-                                                          n=3, m=10, tf_max=600, rng=rng))
+    # pw_trajs = []
+    # for i in range(100):
+    #     print(i)
+    #     pw_trajs.append(generate_piecewise_apf_trajectory(x0, goal, obstacles, d_obs=d_obs, rho_std=0.1,
+    #                                                       n=3, m=10, tf_max=600, rng=rng))
 
-    fig2, ax2 = plt.subplots()
-    for pw_traj in pw_trajs:
-        for traj in pw_traj:
-            traj.plot(ax2, showCpts=False)
+    # fig2, ax2 = plt.subplots()
+    # for pw_traj in pw_trajs:
+    #     for traj in pw_traj:
+    #         traj.plot(ax2, showCpts=False)
 
-    for obs in obstacles:
-        artist = Circle(obs, radius=d_obs)
-        ax2.add_artist(artist)
+    # for obs in obstacles:
+    #     artist = Circle(obs, radius=d_obs)
+    #     ax2.add_artist(artist)
