@@ -27,6 +27,7 @@ from jfs_core.stoch_opt.cost_functions import SumOfDistance
 
 from jfs_core.apf_search import generate_apf_trajectory, generate_piecewise_apf_trajectory
 from jfs_core.brachistochrone_search import generate_brachistochrone_trajectory
+from jfs_core.cbf_search import generate_cbf_trajectory
 from jfs_core.lqr_search import generate_lqr_trajectory
 
 LOG_LEVEL = logging.WARNING
@@ -164,6 +165,34 @@ DISABLE_CONSTRAINTS = False
 
 @dataclass
 class SolverParameters:
+    """Parameters for the trajectory solver used within the jellyfish search
+
+    Note that this documentation is currently incomplete but it should provide sufficient information for basic usage.
+
+    Parameters
+    ----------
+    method : str
+        Solver method to use for generating the jellyfish trajectories. Methods include:
+            * APF - Artificial potential fields. See [1] for details.
+            * APF_PW - Same as APF but using piecewise Bernstein polynomials
+            * Brachistochrone
+            * CBF - Control barrier functions. See [1] for details.
+            * LQR
+    params : dict
+        Depending on the method, different parameters are expected. The methods and their corresponding parameters are:
+        * CBF - {Katt_std : Standard deviation of the attractive gain. Default is 1.
+                 Krep_std : Standard deviation of the repulsive gain. Default is 1.
+                 rho_std : Standard deviation of rho_0. Default is 1.
+                 d_obs : Minimum safe distance to obstacles. Default is 1.
+                 tf_max : Maximum final time for the IVP solver. Default is 60 seconds.
+                 delta : Small value used within the CBF. See [1, eq.17] for details. Default is 0.01.}
+
+    References
+    ----------
+    [1] Singletary, Andrew, et al. "Comparative analysis of control barrier functions and artificial potential fields
+        for obstacle avoidance." 2021 IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS). IEEE,
+        2021.
+    """
     method: str
     params: dict
     trajectory_count: int
@@ -280,6 +309,7 @@ def _trajectory_gen_fn(rng_sequence_seed, problem_parameters, solver_parameters,
         return generate_apf_trajectory(problem_parameters.x0,
                                        problem_parameters.goal,
                                        problem_parameters.obstacles,
+                                       d_obs=problem_parameters.safe_distance,
                                        rho_std=solver_parameters.params['rho_std'],
                                        Katt_std=solver_parameters.params['Katt_std'],
                                        Krep_std=solver_parameters.params['Krep_std'],
@@ -287,9 +317,21 @@ def _trajectory_gen_fn(rng_sequence_seed, problem_parameters, solver_parameters,
                                        n=problem_parameters.n,
                                        rng=rng)
     elif solver_method == 'apf_pw':
-        pass
+        print('[!] APF PW method is not enabled yet')
     elif solver_method == 'brachistochrone':
-        pass
+        print('[!] Brachistochrone method is not enabled yet')
+    elif solver_method =='cbf':
+        return generate_cbf_trajectory(problem_parameters.x0,
+                                       problem_parameters.goal,
+                                       problem_parameters.obstacles,
+                                       n=problem_parameters.n,
+                                       Katt_std=solver_parameters.params['Katt_std'],
+                                       Krep_std=solver_parameters.params['Krep_std'],
+                                       rho_std=solver_parameters.params['rho_std'],
+                                       d_obs=problem_parameters.safe_distance,
+                                       tf_max=solver_parameters.params['tf_max'],
+                                       delta=solver_parameters.params['delta'],
+                                       rng=rng)
     elif solver_method == 'lqr':
         return generate_lqr_trajectory(problem_parameters.x0,
                                        problem_parameters.goal,

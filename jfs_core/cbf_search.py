@@ -8,14 +8,28 @@ Created on Mon Mar  6 14:13:04 2023
 from numbalsoda import lsoda, lsoda_sig
 from numba import carray, cfunc, njit
 import numpy as np
+from scipy.integrate import solve_ivp
+
+from polynomial.bernstein import Bernstein
 
 
 def generate_cbf_trajectory(x0, goal, obstacles,
-                            n=5, Katt_std=1, Krep_std=1, rho_std=1, d_obs=1, tf_max=60, t0=0, rng=None):
+                            n=5, Katt_std=1, Krep_std=1, rho_std=1, d_obs=1, tf_max=60, t0=0, delta=0.01, rng=None):
     if rng is None:
         rng = np.random.default_rng()
 
     Katt, Krep, rho_0 = create_perturbed_parameters(Katt_std, Krep_std, rho_std, rng)
+
+    fcbf = FCBF(x0, obstacles, goal, Katt=Katt, Krep=Krep, rho_0=rho_0, d_obs=d_obs, delta=delta)
+    result = solve_ivp(fcbf.fn, (t0, tf_max), x0, max_step=1e-2, dense_output=True, events=fcbf.event)
+
+    tf = result.t[-1]
+    t_eval = np.linspace(t0, tf, n+1)
+    cpts = result.sol(t_eval)
+
+    traj = Bernstein(cpts, t0=t0, tf=tf)
+
+    return traj
 
 
 def create_perturbed_parameters(Katt_std, Krep_std, rho_std, rng):
@@ -69,9 +83,10 @@ def make_lsoda_fn(goal, obstacles, d_obs, k_att, k_rep, rho_0, delta):
     return _fapf_fn_lsoda
 
 
-@njit(cache=True)
+# @njit(cache=True)
 def _fcbf_fn(t, x, goal, obstacles, d_obs, k_att, k_rep, rho_0, delta):
-    vstar = -_grad_uatt(x, k_att, goal)
+    norm = np.linalg.norm(x - goal)
+    vstar = -_grad_uatt(x, k_att, goal) / norm
 
     min_dist = np.inf
     nearest_obstacle = None
@@ -161,7 +176,6 @@ if __name__ == '__main__':
 
     import matplotlib.pyplot as plt
     from matplotlib.patches import Circle
-    from scipy.integrate import solve_ivp
 
     ###
     # Problem setup
@@ -178,17 +192,24 @@ if __name__ == '__main__':
                  np.array([30, -1], dtype=float)]
 
     ###
+    # Testing generate_cbf_trajectory
+    ###
+    tstart = time.time()
+    traj = generate_cbf_trajectory(x0, goal, obstacles)
+    print(f'Computation time for generate_cbf_trajectory: {time.time() - tstart} s')
+
+    ###
     # Scipy's solve_ivp method
     ###
     fcbf = FCBF(x0, obstacles, goal)
     tstart = time.time()
-    sol = solve_ivp(fcbf.fn, (0, tf), x0, max_step=1e-2)
+    result = solve_ivp(fcbf.fn, (0, tf), x0, max_step=1e-2, dense_output=True)
     print(f'Computation time (solve_ivp): {time.time()-tstart} s')
 
     ###
     # Numba LSODA's ivp solver
     ###
-    t_eval = np.linspace(0, tf, tf*100)
+    t_eval = np.linspace(0, tf, tf*1000)
     tstart = time.time()
     fn_address = fcbf.make_lsoda_fn_address()
     usol, success = lsoda(fn_address, x0, t_eval)
@@ -198,10 +219,15 @@ if __name__ == '__main__':
     # Plot the results
     ###
     plt.close('all')
-    fig, ax = plt.subplots()
-    ax.plot(sol.y[0, :], sol.y[1, :])
+    fig0, ax0 = plt.subplots()
+    traj.plot(ax0)
     for obs in obstacles:
-        ax.add_artist(Circle(obs, radius=fcbf.d_obs))
+        ax0.add_artist(Circle(obs, radius=fcbf.d_obs))
+
+    fig1, ax1 = plt.subplots()
+    ax1.plot(result.y[0, :], result.y[1, :])
+    for obs in obstacles:
+        ax1.add_artist(Circle(obs, radius=fcbf.d_obs))
 
     fig2, ax2 = plt.subplots()
     ax2.plot(usol[:, 0], usol[:, 1])

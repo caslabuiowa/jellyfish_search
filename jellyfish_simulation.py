@@ -58,11 +58,19 @@ def create_animation():
                     initial_position[1],
                     ], dtype=float)
 
-    solver_params = SolverParameters('apf',
+    # solver_params = SolverParameters('apf',
+    #                                  {'rho_std': 0.1,
+    #                                   'Katt_std': 1,
+    #                                   'Krep_std': 1,
+    #                                   'tf_max': 60},
+    #                                  n_trajectories,
+    #                                  rng_seed=seed)
+    solver_params = SolverParameters('cbf',
                                      {'rho_std': 0.1,
                                       'Katt_std': 1,
                                       'Krep_std': 1,
-                                      'tf_max': 60},
+                                      'tf_max': 60,
+                                      'delta': 0.01},
                                      n_trajectories,
                                      rng_seed=seed)
     problem_params = ProblemParameters(n,
