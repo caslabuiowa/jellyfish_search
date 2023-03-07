@@ -171,7 +171,7 @@ def _fapf_fn(t, x, goal, obstacles, d_obs, Katt, Krep, rho_0):
         rho_x = np.linalg.norm(x - obs) - d_obs
         if rho_x <= rho_0:
             # gain = (self.Krep/rho_x**3) * (1 - rho_x/self.rho_0)
-            gain = -Krep*(rho_0 - rho_x) / (rho_0*rho_x**4)
+            gain = -Krep*(rho_0 - rho_x) / (rho_0*np.linalg.norm(x - obs)*rho_x**3)
 
             u_rep_x += gain*(x[0] - obs[0])
             u_rep_y += gain*(x[1] - obs[1])

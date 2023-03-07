@@ -126,7 +126,7 @@ def create_animation():
         fname = f'animation_{fidx}.mp4'
 
     print(f'Saving to {fname}...')
-    fa.save(fname, dpi=my_dpi, codec='av1')
+    fa.save(fname, dpi=my_dpi)
     print('Done!')
 
 
