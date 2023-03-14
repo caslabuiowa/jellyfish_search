@@ -134,7 +134,7 @@ def _grad_h(x, k_rep, rho_0, x_obs, d_obs):
 
 @njit(cache=True)
 def _uatt(x, k_att, x_goal):
-    return 0.5*k_att*(x@x_goal)
+    return 0.5*k_att*((x-x_goal)@(x-x_goal))
 
 
 @njit(cache=True)
