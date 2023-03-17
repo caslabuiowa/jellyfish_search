@@ -14,7 +14,8 @@ from polynomial.bernstein import Bernstein
 
 
 def generate_cbf_trajectory(x0, goal, obstacles,
-                            n=5, Katt_std=1, Krep_std=1, rho_std=1, d_obs=1, tf_max=60, t0=0, delta=0.01, rng=None):
+                            n=5, Katt_std=1, Krep_std=1, rho_std=1, d_obs=1, tf_max=60, t0=0, delta=0.01, rng=None,
+                            debug=False):
     if rng is None:
         rng = np.random.default_rng()
 
@@ -29,7 +30,10 @@ def generate_cbf_trajectory(x0, goal, obstacles,
 
     traj = Bernstein(cpts, t0=t0, tf=tf)
 
-    return traj
+    if debug:
+        return traj, Katt, Krep, rho_0, result
+    else:
+        return traj
 
 
 def create_perturbed_parameters(Katt_std, Krep_std, rho_std, rng):
@@ -83,7 +87,7 @@ def make_lsoda_fn(goal, obstacles, d_obs, k_att, k_rep, rho_0, delta):
     return _fapf_fn_lsoda
 
 
-# @njit(cache=True)
+@njit(cache=True)
 def _fcbf_fn(t, x, goal, obstacles, d_obs, k_att, k_rep, rho_0, delta):
     norm = np.linalg.norm(x - goal)
     vstar = -_grad_uatt(x, k_att, goal) / norm
@@ -180,6 +184,7 @@ if __name__ == '__main__':
     ###
     # Problem setup
     ###
+    rng = np.random.default_rng(3)
     tf = 15
     goal = np.array([15, 2], dtype=float)
     x0 = np.array([0.1, 0.1], dtype=float)
@@ -195,7 +200,7 @@ if __name__ == '__main__':
     # Testing generate_cbf_trajectory
     ###
     tstart = time.time()
-    traj = generate_cbf_trajectory(x0, goal, obstacles)
+    traj = generate_cbf_trajectory(x0, goal, obstacles, tf_max=tf, n=30, rng=rng)
     print(f'Computation time for generate_cbf_trajectory: {time.time() - tstart} s')
 
     ###
