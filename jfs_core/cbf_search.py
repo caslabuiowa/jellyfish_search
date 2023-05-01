@@ -240,9 +240,9 @@ if __name__ == '__main__':
     ###
     # Problem setup
     ###
-    rng_seed = 2
+    rng_seed = 3
     goal_std = 0.1
-    obs_pos_std = 1
+    obs_pos_std = 0.5
     obs_size_std = 0.3
     tf = 50
     goal = np.array([20, 20], dtype=float)
@@ -281,11 +281,11 @@ if __name__ == '__main__':
     results = []
     tstart = time.time()
     for i in range(100):
-        obs_tmp = tuple([obs + rng.normal(scale=obs_pos_std, size=2) for obs in obstacles])
-        obs_dsafe_tmp = tuple([np.abs(obs_dist + rng.normal(scale=obs_size_std)) for obs_dist in obstacle_safe_distances])
+        obs_tmp = tuple([obs + rng.normal(scale=obs_pos_std+i/100, size=2) for obs in obstacles])
+        obs_dsafe_tmp = tuple([np.abs(obs_dist + rng.normal(scale=obs_size_std+i/100)) for obs_dist in obstacle_safe_distances])
         goal_tmp = goal + rng.normal(scale=goal_std, size=goal.size)
         result, tf_early_term = fast_generate_cbf_trajectory(x0, goal_tmp, obs_tmp, obs_dsafe_tmp,
-                                                             n_steps=1000, rho_0=100, Krep=0.1, tf_max=60)
+                                                             n_steps=100, rho_0=10, Krep=0.1, tf_max=60)
         results.append(result)
     print(f'Computation time for 100 runs (euler ivp): {time.time()-tstart} s')
 
