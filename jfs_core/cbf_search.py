@@ -224,8 +224,16 @@ def fast_generate_cbf_trajectory(x0, goal, obstacles, obstacle_safe_distances,
     x[0, :] = x0
     for i, t in enumerate(t_eval):
         vstar = _fcbf_fn(t, x[i, :], goal, obstacles, obstacle_safe_distances, Katt, Krep, rho_0, delta)
-        x[i+1, :] = vstar*dt + x[i, :]
-        if np.linalg.norm(x[-1] - goal) < 1e-2:
+        tmp = vstar*dt + x[i, :]
+        x[i+1, :] = tmp
+
+        # square_dist = 0.0
+        # for j, g in enumerate(goal):
+        #     square_dist += (x[i+1, j] - g)**2
+        # if square_dist < (1e-2)**2:
+        #     break
+        if np.linalg.norm(tmp - goal) < 1e-1:
+            x = x[:i+1, :]
             break
 
     return x, t

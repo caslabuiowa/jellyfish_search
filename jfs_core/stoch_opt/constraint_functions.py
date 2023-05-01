@@ -38,17 +38,25 @@ class CollisionAvoidance(ConstraintBase):
             t0 = traj.t0
             tf = traj.tf
 
-            for obs in self.obstacles:
+            for i, obs in enumerate(self.obstacles):
                 cpts = np.array([[i]*(n+1) for i in obs[:ndim]], dtype=float)
                 c_obs = Bernstein(cpts, t0, tf)
 
                 dist = (traj - c_obs).normSquare().elev(self.elev).cpts
 
-                if np.any(dist - self.safe_dist**2 < 0):
-                    # print('[!] Collision avoidance constraint infeasible.')
-                    return False
+                # if type(self.safe_dist) is list:
+                #     if np.any(dist - self.safe_dist[i]**2 < 0):
+                #         return False
+                # else:
+                #     if np.any(dist - self.safe_dist**2 < 0):
+                #         return False
 
-        return True
+                try:
+                    result = np.all(dist - self.safe_dist[i]**2 >= 0)
+                except TypeError:
+                    result = np.all(dist - self.safe_dist**2 >= 0)
+
+        return result
 
 
 class MaximumSpeed(ConstraintBase):
