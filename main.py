@@ -12,10 +12,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from jfs_core.jfs import JellyfishSearch
+from plotting_utils import setRCParams, resetRCParams
 
 if __name__ == '__main__':
     discrete_traj = False
-    num_trajectories = 100
+    num_trajectories = 10
     solver_params = dict(n_steps=300,
                          tf_max=60,
                          Katt=1,
@@ -50,7 +51,16 @@ if __name__ == '__main__':
                                         3,
                                         1], dtype=float)
 
-    jfs = JellyfishSearch(rng_seed=1, num_workers=12, discrete_traj=discrete_traj)
+    jfs = JellyfishSearch(rng_seed=2, num_workers=12, discrete_traj=discrete_traj)
+
+    t_start = time.time()
+    results = []
+    for i in range(1):
+        x0[1] += 0.1
+        results += jfs.generate_trajectories(x0, goal, obstacles, obstacle_safe_distances, num_trajectories,
+                                             vmax, wmax, rsafe,
+                                             obs_pos_std, obs_size_std, goal_pos_std, degree, solver_params)
+    print(f'Elapsed time: {time.time() - t_start}')
 
     t_start = time.time()
     results = []
@@ -64,6 +74,8 @@ if __name__ == '__main__':
     print('Deleting jfs object.')
     del jfs
     print('Object deleted.')
+
+    setRCParams()
 
     if discrete_traj:
         plt.close('all')
@@ -85,3 +97,5 @@ if __name__ == '__main__':
 
         for i, obs in enumerate(obstacles):
             ax.add_artist(Circle(obs, radius=obstacle_safe_distances[i]))
+
+    resetRCParams()
