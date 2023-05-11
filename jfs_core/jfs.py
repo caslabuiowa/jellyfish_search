@@ -10,7 +10,7 @@ import multiprocessing as mp
 
 import numpy as np
 
-from polynomial.bernstein import Bernstein
+from BeBOT.polynomial.bernstein import Bernstein
 
 from jfs_core.cbf_search import fast_generate_cbf_trajectory
 from jfs_core.stoch_opt.constraint_functions import CollisionAvoidance, MaximumAngularRate, MaximumSpeed, SafeSphere

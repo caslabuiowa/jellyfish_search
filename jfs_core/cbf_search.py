@@ -11,7 +11,7 @@ from numba.experimental import jitclass
 import numpy as np
 from scipy.integrate import solve_ivp
 
-from polynomial.bernstein import Bernstein
+from BeBOT.polynomial.bernstein import Bernstein
 
 
 # def generate_cbf_trajectory(x0, goal, obstacles,

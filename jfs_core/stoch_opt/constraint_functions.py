@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from polynomial.bernstein import Bernstein
+from BeBOT.polynomial.bernstein import Bernstein
 
 
 class ConstraintBase(ABC):

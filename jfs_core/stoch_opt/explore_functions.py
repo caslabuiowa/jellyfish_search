@@ -12,7 +12,7 @@ from copy import deepcopy
 import numpy as np
 from numpy.random import default_rng
 
-from polynomial.bernstein import Bernstein
+from BeBOT.polynomial.bernstein import Bernstein
 from .utils import state2cpts
 
 

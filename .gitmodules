@@ -1,0 +1,3 @@
+[submodule "BeBOT"]
+	path = BeBOT
+	url = git@github.com:caslabuiowa/BeBOT
