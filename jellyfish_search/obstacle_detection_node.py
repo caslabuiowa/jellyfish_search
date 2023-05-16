@@ -31,7 +31,7 @@ class ObstacleDetector(Node):
             namespace='',
             parameters=[
                 ('obstacle_publish_frequency', 10, obs_pub_freq_description),
-                ('obstacle_frame_id', 'base_link', obs_frame_description)
+                ('obstacle_frame_id', 'odom', obs_frame_description)
                 ],
             )
 

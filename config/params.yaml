@@ -3,7 +3,7 @@ obstacle_detector:
         # Frequency at which to publish the obstacle list (Hz), default: 10
         obstacle_publish_frequency: 10
         # Frame ID for the obstacles, default: 'world'
-        obstacle_frame_id: 'base_link'
+        obstacle_frame_id: 'odom'
 
 trajectory_generator:
     ros__params:
@@ -13,7 +13,7 @@ trajectory_generator:
         num_trajectories: 100
         maximum_speed: 10.0
         maximum_angular_rate: 0.7853981633974483
-        trajectory_frame_id: 'base_link'
+        trajectory_frame_id: 'odom'
         rng_seed: 1
         trajectory_generation_period: 1.0
         solver_params:

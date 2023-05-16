@@ -33,7 +33,7 @@ class TrajectoryGenerator(Node):
                 ('obstacle_size_std', 0.3),
                 ('goal_position_std', 6.0),
                 ('polynomial_degree', 5),
-                ('trajectory_frame_id', 'base_link'),
+                ('trajectory_frame_id', 'odom'),
                 ('trajectory_generation_period', 1.0),
                 ('solver_params.n_steps', 300),
                 ('solver_params.tf_max', 60.0,),
