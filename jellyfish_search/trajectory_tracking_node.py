@@ -6,7 +6,7 @@ Created on Tue May 16 11:50:48 2023
 @author: magicbycalvin
 """
 import numpy as np
-from scipy.spatial.transform import rotation as R
+from scipy.spatial.transform import Rotation as R
 
 import rclpy
 from rclpy.duration import Duration
@@ -131,8 +131,8 @@ class TrajectoryTracker(Node):
             thrust_right = v_cmd + w_cmd
             thrust_left = v_cmd - w_cmd
 
-            self.thruster_left_pub.publish(thrust_left)
-            self.thruster_right_pub.publish(thrust_right)
+            self.thruster_left_pub.publish(Float64(data=thrust_left))
+            self.thruster_right_pub.publish(Float64(data=thrust_right))
 
             self.x_err_int += x_err*dt
             self.y_err_int += y_err*dt
