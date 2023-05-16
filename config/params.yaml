@@ -1,0 +1,25 @@
+obstacle_detector:
+    ros__params:
+        # Frequency at which to publish the obstacle list (Hz), default: 10
+        obstacle_publish_frequency: 10
+        # Frame ID for the obstacles, default: 'world'
+        obstacle_frame_id: 'base_link'
+
+trajectory_generator:
+    ros__params:
+        # Maximum radius at which the vehicle can detect obstacles (m), default: 10
+        perception_radius: 10.0
+        num_workers: 10
+        num_trajectories: 100
+        maximum_speed: 10.0
+        maximum_angular_rate: 0.7853981633974483
+        trajectory_frame_id: 'base_link'
+        rng_seed: 1
+        trajectory_generation_period: 1.0
+        solver_params:
+            n_steps: 300
+            tf_max: 60.0
+            Katt: 1.0
+            Krep: 1.0
+            rho_0: 1.0
+            delta: 0.0
