@@ -12,7 +12,7 @@ import numpy as np
 
 from BeBOT.polynomial.bernstein import Bernstein
 
-from jfs_core.cbf_search import fast_generate_cbf_trajectory
+from jfs_core.cbf_search import fast_generate_cbf_trajectory, fast_generate_cbf_trajectory_no_obs
 from jfs_core.stoch_opt.constraint_functions import CollisionAvoidance, MaximumAngularRate, MaximumSpeed, SafeSphere
 from jfs_core.stoch_opt.cost_functions import SumOfDistance
 
@@ -31,7 +31,8 @@ class JellyfishSearch:
                               solver_params={}):
         seed_seq = np.random.SeedSequence(self._rng_seed)
         rng_seeds = seed_seq.spawn(num_trajectories)
-
+        print(f'Current goal from JFS: {goal}')
+        print(f'Goal position std: {goal_pos_std}')
         results = self._pool.starmap(_traj_gen_wrapper, zip([x0]*num_trajectories,
                                                             [goal]*num_trajectories,
                                                             [obstacles]*num_trajectories,
@@ -51,34 +52,37 @@ class JellyfishSearch:
 
         return results
 
-    def generate_trajectories_pool(self, x0, goal, obstacles, obstacle_safe_distances, num_trajectories,
-                                   obs_pos_std, obs_size_std, goal_pos_std,
-                                   solver_params={}):
-        seed_seq = np.random.SeedSequence(self._rng_seed)
-        rng_seeds = seed_seq.spawn(num_trajectories)
+    # def generate_trajectories_pool(self, x0, goal, obstacles, obstacle_safe_distances, num_trajectories,
+    #                                obs_pos_std, obs_size_std, goal_pos_std,
+    #                                solver_params={}):
+    #     seed_seq = np.random.SeedSequence(self._rng_seed)
+    #     rng_seeds = seed_seq.spawn(num_trajectories)
 
-        with mp.Pool(10) as pool:
-            results = pool.starmap(_traj_gen_wrapper, zip([x0]*num_trajectories,
-                                                          [goal]*num_trajectories,
-                                                          [obstacles]*num_trajectories,
-                                                          [obstacle_safe_distances]*num_trajectories,
-                                                          rng_seeds,
-                                                          [obs_pos_std]*num_trajectories,
-                                                          [obs_size_std]*num_trajectories,
-                                                          [goal_pos_std]*num_trajectories,
-                                                          [solver_params]*num_trajectories))
+    #     with mp.Pool(10) as pool:
+    #         results = pool.starmap(_traj_gen_wrapper, zip([x0]*num_trajectories,
+    #                                                       [goal]*num_trajectories,
+    #                                                       [obstacles]*num_trajectories,
+    #                                                       [obstacle_safe_distances]*num_trajectories,
+    #                                                       rng_seeds,
+    #                                                       [obs_pos_std]*num_trajectories,
+    #                                                       [obs_size_std]*num_trajectories,
+    #                                                       [goal_pos_std]*num_trajectories,
+    #                                                       [solver_params]*num_trajectories))
 
-        return results
+    #     return results
 
 
 def _traj_gen_wrapper(x0, goal, obstacles, obstacle_safe_distances, rng_seed, obs_pos_std, obs_size_std, goal_pos_std,
                       vmax, wmax, rsafe, degree, discrete, solver_params):
     rng = np.random.default_rng(rng_seed)
-    obs_tmp = tuple([obs + rng.normal(scale=obs_pos_std, size=2) for obs in obstacles])
-    obs_dsafe_tmp = tuple([obs_dist + np.abs(rng.normal(scale=obs_size_std)) for obs_dist in obstacle_safe_distances])
     goal_tmp = goal + rng.normal(scale=goal_pos_std, size=goal.size)
-
-    discrete_traj = fast_generate_cbf_trajectory(x0, goal_tmp, obs_tmp, obs_dsafe_tmp, **solver_params)
+    if len(obstacles[0]) > 0:
+        obs_tmp = np.array([obs + rng.normal(scale=obs_pos_std, size=2) for obs in obstacles])
+        obs_dsafe_tmp = np.array([obs_dist + np.abs(rng.normal(scale=obs_size_std))
+                               for obs_dist in obstacle_safe_distances])
+        discrete_traj = fast_generate_cbf_trajectory(x0, goal_tmp, obs_tmp, obs_dsafe_tmp, **solver_params)
+    else:
+        discrete_traj = fast_generate_cbf_trajectory_no_obs(x0, goal_tmp, **solver_params)
 
     if discrete:
         return discrete_traj

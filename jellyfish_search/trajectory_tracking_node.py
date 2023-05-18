@@ -36,14 +36,19 @@ class TrajectoryTracker(Node):
                 ('gain_theta_i', 1.0),
                 ('gain_theta_d', 1.0),
                 ('world_frame_id', 'world'),
-                ('robot_frame_id', 'base_link')
+                ('robot_frame_id', 'wamv')
                 ]
             )
 
         self.thruster_left_pub = self.create_publisher(Float64, 'wamv/thrusters/left/thrust', 10)
         self.thruster_right_pub = self.create_publisher(Float64, 'wamv/thrusters/right/thrust', 10)
+        self.x_err_pub = self.create_publisher(Float64, 'x_err', 10)
+        self.y_err_pub = self.create_publisher(Float64, 'y_err', 10)
+        self.theta_err_pub = self.create_publisher(Float64, 'theta_err', 10)
+        self.speed_err_pub = self.create_publisher(Float64, 'speed_err', 10)
 
-        self.odom_sub = self.create_subscription(Odometry, 'odometry/local', self.odom_cb, 10)
+        self.odom_sub = self.create_subscription(Odometry, 'wamv/sensors/position/ground_truth_odometry',
+                                                 self.odom_cb, 10)
         self.traj_sub = self.create_subscription(BernsteinTrajectory, 'bebot_trajectory', self.traj_cb, 10)
 
         self._tf_buffer = Buffer()
@@ -83,6 +88,8 @@ class TrajectoryTracker(Node):
         cpts = np.array([(i.x, i.y) for i in data.cpts], dtype=float).T
         self.cur_traj = Bernstein(cpts=cpts, t0=t0, tf=tf)
 
+        self.get_logger().info(f'Trajectory received: {self.cur_traj}')
+
         # Zero all integrator errors to mitigate integral windup
         self.x_err_int = 0.0
         self.y_err_int = 0.0
@@ -108,6 +115,11 @@ class TrajectoryTracker(Node):
             t = (now - t0).nanoseconds*1e-9
             dt = (now - self.t_last).nanoseconds*1e-9
 
+            if t > self.cur_traj.tf:
+                t = self.cur_traj.tf
+            elif t < self.cur_traj.t0:
+                t = self.cur_traj.t0
+
             x_veh = self.pose[0]
             y_veh = self.pose[1]
             theta_veh = self.pose[2]
@@ -122,8 +134,15 @@ class TrajectoryTracker(Node):
 
             x_err = np.cos(theta_veh)*(x_ref - x_veh) + np.sin(theta_veh)*(y_ref - y_veh)
             y_err = -np.sin(theta_veh)*(x_ref - x_veh) + np.cos(theta_veh)*(y_ref - y_veh)
+            if np.abs(x_err) > 1e3 or np.abs(y_err) > 1e3:
+                self.get_logger().info(f'Large error!\n{theta_veh=}\n{x_veh=}\n{y_veh=}\n{x_ref=}\n{y_ref=}')
             theta_err = theta_ref - theta_veh
             v_err = v_ref - v_veh
+
+            self.x_err_pub.publish(Float64(data=x_err))
+            self.y_err_pub.publish(Float64(data=y_err))
+            self.theta_err_pub.publish(Float64(data=theta_err))
+            self.speed_err_pub.publish(Float64(data=v_err))
 
             v_cmd = v_ref*np.cos(theta_err) + kp_pos*x_err + ki_pos*self.x_err_int + kv_pos*v_err
             w_cmd = kp_theta*theta_err + ki_theta*self.theta_err_int

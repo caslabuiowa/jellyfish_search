@@ -5,24 +5,19 @@ Created on Mon Mar  6 14:13:04 2023
 
 @author: magicbycalvin
 """
-from numbalsoda import lsoda, lsoda_sig
-from numba import carray, cfunc, njit
-from numba.experimental import jitclass
+# from numbalsoda import lsoda, lsoda_sig
+from numba import njit  # carray, cfunc
+# from numba.experimental import jitclass
 import numpy as np
-from scipy.integrate import solve_ivp
+# from scipy.integrate import solve_ivp
 
-from BeBOT.polynomial.bernstein import Bernstein
+# from BeBOT.polynomial.bernstein import Bernstein
 
 
-# def generate_cbf_trajectory(x0, goal, obstacles,
-#                             n=5, Katt_std=1, Krep_std=1, rho_std=1, d_obs=1, tf_max=60, t0=0, delta=0.01, rng=None,
-#                             debug=False):
-#     if rng is None:
-#         rng = np.random.default_rng()
+# def generate_cbf_trajectory(x0, goal, obstacles, obstacle_safe_distances,
+#                             n=5, Katt=1, Krep=1, rho_0=1, tf_max=60, t0=0, delta=0.01, debug=False):
 
-#     Katt, Krep, rho_0 = create_perturbed_parameters(Katt_std, Krep_std, rho_std, rng)
-
-#     fcbf = FCBF(x0, obstacles, goal, Katt=Katt, Krep=Krep, rho_0=rho_0, d_obs=d_obs, delta=delta)
+#     fcbf = FCBF(x0, obstacles, obstacle_safe_distances, goal, Katt=Katt, Krep=Krep, rho_0=rho_0, delta=delta)
 #     result = solve_ivp(fcbf.fn, (t0, tf_max), x0, max_step=1e-2, dense_output=True, events=fcbf.event)
 
 #     tf = result.t[-1]
@@ -37,74 +32,55 @@ from BeBOT.polynomial.bernstein import Bernstein
 #         return traj
 
 
+# def create_perturbed_parameters(Katt_std, Krep_std, rho_std, rng):
+#     Katt = rng.lognormal(mean=1, sigma=Katt_std)
+#     Krep = rng.lognormal(mean=1, sigma=Krep_std)
+#     rho_0 = rng.lognormal(mean=0.5, sigma=rho_std)
 
-def generate_cbf_trajectory(x0, goal, obstacles, obstacle_safe_distances,
-                            n=5, Katt=1, Krep=1, rho_0=1, tf_max=60, t0=0, delta=0.01, debug=False):
-
-    fcbf = FCBF(x0, obstacles, obstacle_safe_distances, goal, Katt=Katt, Krep=Krep, rho_0=rho_0, delta=delta)
-    result = solve_ivp(fcbf.fn, (t0, tf_max), x0, max_step=1e-2, dense_output=True, events=fcbf.event)
-
-    tf = result.t[-1]
-    t_eval = np.linspace(t0, tf, n+1)
-    cpts = result.sol(t_eval)
-
-    traj = Bernstein(cpts, t0=t0, tf=tf)
-
-    if debug:
-        return traj, Katt, Krep, rho_0, result
-    else:
-        return traj
+#     return Katt, Krep, rho_0
 
 
-def create_perturbed_parameters(Katt_std, Krep_std, rho_std, rng):
-    Katt = rng.lognormal(mean=1, sigma=Katt_std)
-    Krep = rng.lognormal(mean=1, sigma=Krep_std)
-    rho_0 = rng.lognormal(mean=0.5, sigma=rho_std)
+# class FCBF:
+#     def __init__(self, x0, obstacles, obstacle_safe_distances, goal, Katt=1, Krep=1, rho_0=1, delta=0.01):
+#         self.x0 = x0
+#         self.obstacles = tuple(obstacles)
+#         self.safe_dists = obstacle_safe_distances
+#         self.goal = goal
+#         self.Katt = Katt
+#         self.Krep = Krep
+#         self.rho_0 = rho_0
+#         self.delta = delta
 
-    return Katt, Krep, rho_0
+#     def make_lsoda_fn_address(self):
+#         func = make_lsoda_fn(self.goal, self.obstacles, self.safe_dists, self.Katt, self.Krep, self.rho_0, self.delta)
 
+#         return func.address
 
-class FCBF:
-    def __init__(self, x0, obstacles, obstacle_safe_distances, goal, Katt=1, Krep=1, rho_0=1, delta=0.01):
-        self.x0 = x0
-        self.obstacles = tuple(obstacles)
-        self.safe_dists = obstacle_safe_distances
-        self.goal = goal
-        self.Katt = Katt
-        self.Krep = Krep
-        self.rho_0 = rho_0
-        self.delta = delta
+#     def fn(self, t, x):
+#         return _fcbf_fn(t, x, self.goal, self.obstacles, self.safe_dists, self.Katt, self.Krep, self.rho_0, self.delta)
 
-    def make_lsoda_fn_address(self):
-        func = make_lsoda_fn(self.goal, self.obstacles, self.safe_dists, self.Katt, self.Krep, self.rho_0, self.delta)
+#     def event(self, t, x):
+#         distance = np.linalg.norm(x - self.goal)
 
-        return func.address
+#         if distance < 1e-3:
+#             distance = 0.0
 
-    def fn(self, t, x):
-        return _fcbf_fn(t, x, self.goal, self.obstacles, self.safe_dists, self.Katt, self.Krep, self.rho_0, self.delta)
+#         return distance
 
-    def event(self, t, x):
-        distance = np.linalg.norm(x - self.goal)
-
-        if distance < 1e-3:
-            distance = 0.0
-
-        return distance
-
-    event.terminal = True  # Required for the integration to stop early
+#     event.terminal = True  # Required for the integration to stop early
 
 
-def make_lsoda_fn(goal, obstacles, safe_dists, k_att, k_rep, rho_0, delta):
-    @cfunc(lsoda_sig)
-    def _fapf_fn_lsoda(t, x_, dx, _):
-        x = carray(x_, (2,))
+# def make_lsoda_fn(goal, obstacles, safe_dists, k_att, k_rep, rho_0, delta):
+#     @cfunc(lsoda_sig)
+#     def _fapf_fn_lsoda(t, x_, dx, _):
+#         x = carray(x_, (2,))
 
-        vstar = _fcbf_fn(t, x, goal, obstacles, safe_dists, k_att, k_rep, rho_0, delta)
+#         vstar = _fcbf_fn(t, x, goal, obstacles, safe_dists, k_att, k_rep, rho_0, delta)
 
-        for i in range(len(vstar)):
-            dx[i] = vstar[i]
+#         for i in range(len(vstar)):
+#             dx[i] = vstar[i]
 
-    return _fapf_fn_lsoda
+#     return _fapf_fn_lsoda
 
 
 @njit(cache=True)
@@ -129,6 +105,15 @@ def _fcbf_fn(t, x, goal, obstacles, safe_dists, k_att, k_rep, rho_0, delta):
             vstar += -grad_h * psi/(grad_h@grad_h)
 
     return vstar / norm
+
+
+@njit(cache=True)
+def _fcbf_fn_no_obs(t, x, goal, k_att, k_rep, rho_0, delta):
+    norm = np.linalg.norm(x - goal)
+    vstar = -_grad_uatt(x, k_att, goal) #/ norm
+
+    return vstar / norm
+
 
 @njit(cache=True)
 def _psi(x, k_att, k_rep, rho_0, x_goal, x_obs, d_obs, delta):
@@ -198,18 +183,6 @@ def _rho_x(x, x_obs, d_obs):
     return np.linalg.norm(x - x_obs) - d_obs
 
 
-# @njit(cache=True)
-def solve_ivp_euler(fn, x0, t0, tf, n_steps, terminal_fn=None):
-    dt = (tf - t0) / n_steps
-    x = [x0]
-    for t in np.linspace(t0, tf, n_steps):
-        x.append(fn(t, x[-1])*dt + x[-1])
-        if terminal_fn is not None and terminal_fn(x[-1]):
-            break
-
-    return np.array(x), t
-
-
 @njit(cache=True)
 def fast_generate_cbf_trajectory(x0, goal, obstacles, obstacle_safe_distances,
                                  n_steps=1000, tf_max=60, Katt=1, Krep=1, rho_0=1, delta=0.0, debug=False):
@@ -224,6 +197,30 @@ def fast_generate_cbf_trajectory(x0, goal, obstacles, obstacle_safe_distances,
     x[0, :] = x0
     for i, t in enumerate(t_eval):
         vstar = _fcbf_fn(t, x[i, :], goal, obstacles, obstacle_safe_distances, Katt, Krep, rho_0, delta)
+        tmp = vstar*dt + x[i, :]
+        x[i+1, :] = tmp
+
+        if np.linalg.norm(tmp - goal) < 1e-1:
+            x = x[:i+1, :]
+            break
+
+    return x, t
+
+
+@njit(cache=True)
+def fast_generate_cbf_trajectory_no_obs(x0, goal,
+                                        n_steps=1000, tf_max=60, Katt=1, Krep=1, rho_0=1, delta=0.0, debug=False):
+
+    t0 = 0.0
+
+    # TODO - adaptive steps
+    # IVP Solver - Euler's Method
+    dt = (tf_max - t0) / n_steps
+    t_eval = np.linspace(t0, tf_max, n_steps)
+    x = np.zeros((len(t_eval)+1, len(x0)))
+    x[0, :] = x0
+    for i, t in enumerate(t_eval):
+        vstar = _fcbf_fn_no_obs(t, x[i, :], goal, Katt, Krep, rho_0, delta)
         tmp = vstar*dt + x[i, :]
         x[i+1, :] = tmp
 
@@ -271,16 +268,16 @@ if __name__ == '__main__':
                                         3,
                                         1], dtype=float)
 
-    ###
-    # Testing generate_cbf_trajectory
-    ###
-    rng = np.random.default_rng(rng_seed)
-    tstart = time.time()
-    for i in range(3):
-        obs_tmp = tuple([obs + rng.normal(scale=0.05, size=2) for obs in obstacles])
-        obs_dsafe_tmp = tuple([obs_dist + rng.normal(scale=0.01) for obs_dist in obstacle_safe_distances])
-        traj = generate_cbf_trajectory(x0, goal, obs_tmp, obs_dsafe_tmp, tf_max=tf, n=30, Katt=1)
-    print(f'Computation time for 3 runs (generate_cbf_trajectory): {time.time() - tstart} s')
+    # ###
+    # # Testing generate_cbf_trajectory
+    # ###
+    # rng = np.random.default_rng(rng_seed)
+    # tstart = time.time()
+    # for i in range(3):
+    #     obs_tmp = tuple([obs + rng.normal(scale=0.05, size=2) for obs in obstacles])
+    #     obs_dsafe_tmp = tuple([obs_dist + rng.normal(scale=0.01) for obs_dist in obstacle_safe_distances])
+    #     traj = generate_cbf_trajectory(x0, goal, obs_tmp, obs_dsafe_tmp, tf_max=tf, n=30, Katt=1)
+    # print(f'Computation time for 3 runs (generate_cbf_trajectory): {time.time() - tstart} s')
 
     ###
     # Euler's IVP method
@@ -290,39 +287,40 @@ if __name__ == '__main__':
     tstart = time.time()
     for i in range(100):
         obs_tmp = tuple([obs + rng.normal(scale=obs_pos_std+i/100, size=2) for obs in obstacles])
-        obs_dsafe_tmp = tuple([np.abs(obs_dist + rng.normal(scale=obs_size_std+i/100)) for obs_dist in obstacle_safe_distances])
+        obs_dsafe_tmp = tuple([np.abs(obs_dist + rng.normal(scale=obs_size_std+i/100)) for
+                               obs_dist in obstacle_safe_distances])
         goal_tmp = goal + rng.normal(scale=goal_std, size=goal.size)
         result, tf_early_term = fast_generate_cbf_trajectory(x0, goal_tmp, obs_tmp, obs_dsafe_tmp,
                                                              n_steps=100, rho_0=10, Krep=0.1, tf_max=60)
         results.append(result)
     print(f'Computation time for 100 runs (euler ivp): {time.time()-tstart} s')
 
-    ###
-    # Numba LSODA's ivp solver
-    ###
-    fcbf = FCBF(x0, obstacles, obstacle_safe_distances, goal, rho_0=1, delta=0.0)
-    t_eval = np.linspace(0, tf, tf*100000)
-    fn_address = fcbf.make_lsoda_fn_address()
-    tstart = time.time()
-    usol, success = lsoda(fn_address, x0, t_eval)
-    print(f'Computation time (lsoda): {time.time() - tstart} s')
+    # ###
+    # # Numba LSODA's ivp solver
+    # ###
+    # fcbf = FCBF(x0, obstacles, obstacle_safe_distances, goal, rho_0=1, delta=0.0)
+    # t_eval = np.linspace(0, tf, tf*100000)
+    # fn_address = fcbf.make_lsoda_fn_address()
+    # tstart = time.time()
+    # usol, success = lsoda(fn_address, x0, t_eval)
+    # print(f'Computation time (lsoda): {time.time() - tstart} s')
 
     ###
     # Plot the results
     ###
-    plt.close('all')
-    fig0, ax0 = plt.subplots()
-    traj.plot(ax0)
-    for i, obs in enumerate(obstacles):
-        ax0.add_artist(Circle(obs, radius=obstacle_safe_distances[i]))
+    # plt.close('all')
+    # # fig0, ax0 = plt.subplots()
+    # # traj.plot(ax0)
+    # # for i, obs in enumerate(obstacles):
+    # #     ax0.add_artist(Circle(obs, radius=obstacle_safe_distances[i]))
 
-    fig1, ax1 = plt.subplots()
-    for result in results:
-        ax1.plot(result[:, 0], result[:, 1], alpha=0.75)
-    for i, obs in enumerate(obstacles):
-        ax1.add_artist(Circle(obs, radius=obstacle_safe_distances[i]))
+    # fig1, ax1 = plt.subplots()
+    # for result in results:
+    #     ax1.plot(result[:, 0], result[:, 1], alpha=0.75)
+    # for i, obs in enumerate(obstacles):
+    #     ax1.add_artist(Circle(obs, radius=obstacle_safe_distances[i]))
 
-    fig2, ax2 = plt.subplots()
-    ax2.plot(usol[:, 0], usol[:, 1])
-    for i, obs in enumerate(obstacles):
-        ax2.add_artist(Circle(obs, radius=fcbf.safe_dists[i]))
+    # fig2, ax2 = plt.subplots()
+    # ax2.plot(usol[:, 0], usol[:, 1])
+    # for i, obs in enumerate(obstacles):
+    #     ax2.add_artist(Circle(obs, radius=fcbf.safe_dists[i]))

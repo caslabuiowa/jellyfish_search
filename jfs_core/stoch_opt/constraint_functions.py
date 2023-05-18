@@ -32,6 +32,9 @@ class CollisionAvoidance(ConstraintBase):
         self.elev = elev
 
     def call(self, trajs):
+        if len(self.obstacles[0]) == 0:
+            return True
+
         for traj in trajs:
             ndim = traj.dim
             n = traj.deg
