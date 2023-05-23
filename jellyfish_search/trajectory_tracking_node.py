@@ -17,6 +17,7 @@ from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 
 from BeBOT.polynomial.bernstein import Bernstein
+from geometry_msgs.msg import TwistStamped
 from jellyfish_search_msgs.msg import BernsteinTrajectory
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Float64
@@ -36,12 +37,11 @@ class TrajectoryTracker(Node):
                 ('gain_theta_i', 1.0),
                 ('gain_theta_d', 1.0),
                 ('world_frame_id', 'world'),
-                ('robot_frame_id', 'wamv')
+                ('robot_frame_id', 'base_link')
                 ]
             )
 
-        self.thruster_left_pub = self.create_publisher(Float64, 'wamv/thrusters/left/thrust', 10)
-        self.thruster_right_pub = self.create_publisher(Float64, 'wamv/thrusters/right/thrust', 10)
+        self.cmd_vel_pub = self.create_publisher(TwistStamped, 'cmd_vel', 10)
         self.x_ref_pub = self.create_publisher(Float64, 'x_ref', 10)
         self.y_ref_pub = self.create_publisher(Float64, 'y_ref', 10)
         self.theta_ref_pub = self.create_publisher(Float64, 'theta_ref', 10)
@@ -98,12 +98,6 @@ class TrajectoryTracker(Node):
 
         self.get_logger().info(f'Trajectory received: {self.cur_traj}')
 
-        # # Zero all integrator errors to mitigate integral windup
-        # self.x_err_int = 0.0
-        # self.y_err_int = 0.0
-        # self.v_err_int = 0.0
-        # self.theta_err_int = 0.0
-
     def main_cb(self):
         now = self.get_clock().now()
 
@@ -139,15 +133,13 @@ class TrajectoryTracker(Node):
 
             x_err = np.cos(theta_veh)*(x_ref - x_veh) + np.sin(theta_veh)*(y_ref - y_veh)
             y_err = -np.sin(theta_veh)*(x_ref - x_veh) + np.cos(theta_veh)*(y_ref - y_veh)
-            # if np.abs(x_err) > 1e3 or np.abs(y_err) > 1e3:
-            #     self.get_logger().info(f'Large error!\n{theta_veh=}\n{x_veh=}\n{y_veh=}\n{x_ref=}\n{y_ref=}')
             theta_err = theta_ref - theta_veh
             v_err = v_ref - v_veh
 
             d_x_err = (x_err - self.x_err_last)/dt
             d_y_err = (y_err - self.y_err_last)/dt
             d_v_err = (v_err - self.v_err_last)/dt
-            d_theta_err = (theta_err - self.theta_err_last)/dt
+            d_theta_err = (theta_err - self.theta_err_wamvlast)/dt
 
             self.x_err_last = x_err
             self.y_err_last = y_err
@@ -155,14 +147,14 @@ class TrajectoryTracker(Node):
             self.theta_err_last = theta_err
 
             # Add the initial position of the robot to the ref values for easy debugging
-            self.x_ref_pub.publish(Float64(data=x_ref+532.))
-            self.y_ref_pub.publish(Float64(data=y_ref-162.))
+            self.x_ref_pub.publish(Float64(data=x_ref))
+            self.y_ref_pub.publish(Float64(data=y_ref))
             self.theta_ref_pub.publish(Float64(data=theta_ref))
             self.speed_ref_pub.publish(Float64(data=v_ref))
             self.x_err_pub.publish(Float64(data=x_err))
             self.y_err_pub.publish(Float64(data=y_err))
             self.theta_err_pub.publish(Float64(data=theta_err))
-            # self.speed_err_pub.publish(Float64(data=v_err))
+            self.speed_err_pub.publish(Float64(data=v_err))
 
             # v_cmd = v_ref + kp_pos*x_err + ki_pos*self.x_err_int + kv_pos*v_err
             # w_cmd = kp_theta*theta_err + ki_theta*self.theta_err_int
@@ -171,21 +163,11 @@ class TrajectoryTracker(Node):
             v_cmd = v_ref + kp_pos*x_err + ki_pos*self.x_err_int #+ kv_pos*v_err
             w_cmd = kp_theta*y_err + ki_theta*self.y_err_int + kd_theta*d_theta_err
 
-            thrust_right = v_cmd + w_cmd
-            thrust_left = v_cmd - w_cmd
-
-            # Clip the thrusts and also avoid integrator windup
-            if thrust_right > 400 or thrust_right < -400 or thrust_left > 400 or thrust_right < -400:
-                thrust_right = _clip(thrust_right, -400., 400.)
-                thrust_left = _clip(thrust_left, -400., 400.)
-            else:
-                self.x_err_int += x_err*dt
-                self.y_err_int += y_err*dt
-                # self.v_err_int += v_err*dt
-                # self.theta_err_int += theta_err*dt
-
-            self.thruster_left_pub.publish(Float64(data=thrust_left))
-            self.thruster_right_pub.publish(Float64(data=thrust_right))
+            cmd_vel_msg = TwistStamped()
+            cmd_vel_msg.header.stamp = now.to_msg()
+            cmd_vel_msg.header.frame_id = self.get_parameter('robot_frame_id').value
+            cmd_vel_msg.twist.linear.x = v_cmd
+            cmd_vel_msg.twist.angular.z = w_cmd
 
         self.t_last = now
 

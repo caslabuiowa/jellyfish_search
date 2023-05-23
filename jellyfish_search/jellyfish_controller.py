@@ -18,11 +18,11 @@ from jfs_core.jfs import JellyfishSearch
 
 
 #TODO
-# *** Test the JFS with obstacles (probably a good idea to spawn them within the VRX simulator)
-# * Make follow up trajectories continuous
+# x Test the JFS with obstacles (probably a good idea to spawn them within the VRX simulator)
+# x Make follow up trajectories continuous
 # * Decide how to address the perturbed goal w.r.t. the safe sphere
 # * Fix vmax and wmax issues by changing tf rather than culling the trajs that violate
-# * Adaptive noise on goal proximity
+# x Adaptive noise on goal proximity
 # * v, w to LR thrust controller
 
 
