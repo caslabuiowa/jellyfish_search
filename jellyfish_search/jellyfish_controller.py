@@ -4,6 +4,7 @@ import numpy as np
 from rcl_interfaces.msg import ParameterDescriptor
 import rclpy
 from rclpy.node import Node
+from rclpy.time import Time
 from scipy.spatial.transform import Rotation as R
 from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
@@ -17,10 +18,12 @@ from jfs_core.jfs import JellyfishSearch
 
 
 #TODO
+# *** Test the JFS with obstacles (probably a good idea to spawn them within the VRX simulator)
 # * Make follow up trajectories continuous
 # * Decide how to address the perturbed goal w.r.t. the safe sphere
 # * Fix vmax and wmax issues by changing tf rather than culling the trajs that violate
 # * Adaptive noise on goal proximity
+# * v, w to LR thrust controller
 
 
 class TrajectoryGenerator(Node):
@@ -79,7 +82,9 @@ class TrajectoryGenerator(Node):
 
         self.pose = None
         self.goal = None
-        self.previous_trajectory = None
+        # self.previous_trajectory = None
+        # self.previous_time = None
+        self.x_pred = None
 
         self.obstacles = np.array([[]], dtype=float)
         self.obstacle_safe_distances = np.array([], dtype=float)
@@ -169,7 +174,7 @@ class TrajectoryGenerator(Node):
                                  Krep=self.get_parameter('solver_params.Krep').value,
                                  rho_0=self.get_parameter('solver_params.rho_0').value,
                                  delta=self.get_parameter('solver_params.delta').value)
-            x0 = self.pose[:2]
+
             obstacles = self.obstacles
             obstacle_safe_distances = self.obstacle_safe_distances
             num_trajectories = self.get_parameter('num_trajectories').value
@@ -181,8 +186,28 @@ class TrajectoryGenerator(Node):
             goal_pos_std = self.get_parameter('goal_position_std').value
             degree = self.get_parameter('polynomial_degree').value
 
+            # if self.previous_trajectory is None:
+            #     x0 = self.pose[:2]
+            # else:
+            #     t = self.get_parameter('trajectory_generation_period').value
+            #     # t = (self.get_clock().now() - self.previous_time).nanoseconds*1e-9 + dt
+            #     if t > self.previous_trajectory.tf:
+            #         t = self.previous_trajectory.tf
+            #     elif t < self.previous_trajectory.t0:
+            #         t = self.previous_trajectory.t0
+            #     x0 = self.previous_trajectory(t).squeeze()
+            if self.x_pred is None:
+                x0 = self.pose[:2]
+            else:
+                x0 = self.x_pred
+
+            d_goal = np.linalg.norm(cur_goal - x0)
+            goal_pos_std *= (1 - np.exp(-d_goal/10))
+
             self.get_logger().info(f'{x0=}')
             self.get_logger().info(f'{cur_goal=}')
+            self.get_logger().info(f'{d_goal=}')
+            self.get_logger().info(f'{goal_pos_std=}')
 
             result = self.jfs.generate_trajectories(x0,
                                                     cur_goal,
@@ -207,6 +232,15 @@ class TrajectoryGenerator(Node):
 
                 traj_msg = self.create_bt_msg(traj.cpts, traj.t0, traj.tf)
                 self.traj_pub.publish(traj_msg)
+
+                t = self.get_parameter('trajectory_generation_period').value
+                if t > traj.tf:
+                    t = traj.tf
+                elif t < traj.t0:
+                    t = traj.t0
+                # self.previous_trajectory = traj
+                # self.previous_time = Time.from_msg(traj_msg.header.stamp)
+                self.x_pred = traj(t).squeeze()
 
             if self.get_parameter('publish_traj_array').value:
                 traj_array_msg = BernsteinTrajectoryArray()

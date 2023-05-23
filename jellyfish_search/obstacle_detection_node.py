@@ -31,15 +31,20 @@ class ObstacleDetector(Node):
             namespace='',
             parameters=[
                 ('obstacle_publish_frequency', 10, obs_pub_freq_description),
-                ('obstacle_frame_id', 'odom', obs_frame_description)
+                ('obstacle_frame_id', 'odom', obs_frame_description),
+                ('obstacle_file', 'obstacles.json')
                 ],
             )
 
         self.obstacle_pub = self.create_publisher(ObstacleArray, 'obstacles', 10)
 
-        fname = os.path.join(get_package_share_directory('jellyfish_search'), 'config', 'obstacles.json')
+        fname = os.path.join(get_package_share_directory('jellyfish_search'), 'config',
+                             self.get_parameter('obstacle_file').value)
+
+        self.get_logger().info(f'Loading obstacles from file: {fname}')
         with open(fname, 'r') as f:
-            self.static_obstacles = np.array(json.load(f))
+            obstacles_list = json.load(f)
+            self.static_obstacles = np.array(obstacles_list)
 
         self.get_logger().info(f'Static Obstacles:\n{self.static_obstacles}')
 

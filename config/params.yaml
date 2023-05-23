@@ -1,9 +1,14 @@
+/**:
+    ros__parameters:
+        use_sim_time: True
+
 obstacle_detector:
     ros__parameters:
         # Frequency at which to publish the obstacle list (Hz), default: 10
         obstacle_publish_frequency: 10
         # Frame ID for the obstacles, default: 'world'
         obstacle_frame_id: 'map'
+        obstacle_file: 'short_navigation_course_2.json'
 
 trajectory_generator:
     ros__parameters:
@@ -35,10 +40,10 @@ trajectory_generator:
 trajectory_tracker:
     ros__parameters:
         gain_pos_p: 100.0
-        gain_pos_i: 0.1
-        gain_pos_v: 10.0
-        gain_theta_p: 1.0
-        gain_theta_i: 0.1
+        gain_pos_i: 0.0
+        gain_pos_v: 0.0
+        gain_theta_p: 100.0
+        gain_theta_i: 0.0
         gain_theta_d: 0.0
         world_frame_id: 'world'
         robot_frame_id: 'wamv'

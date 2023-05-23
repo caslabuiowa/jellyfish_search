@@ -42,6 +42,10 @@ class TrajectoryTracker(Node):
 
         self.thruster_left_pub = self.create_publisher(Float64, 'wamv/thrusters/left/thrust', 10)
         self.thruster_right_pub = self.create_publisher(Float64, 'wamv/thrusters/right/thrust', 10)
+        self.x_ref_pub = self.create_publisher(Float64, 'x_ref', 10)
+        self.y_ref_pub = self.create_publisher(Float64, 'y_ref', 10)
+        self.theta_ref_pub = self.create_publisher(Float64, 'theta_ref', 10)
+        self.speed_ref_pub = self.create_publisher(Float64, 'speed_ref', 10)
         self.x_err_pub = self.create_publisher(Float64, 'x_err', 10)
         self.y_err_pub = self.create_publisher(Float64, 'y_err', 10)
         self.theta_err_pub = self.create_publisher(Float64, 'theta_err', 10)
@@ -62,6 +66,10 @@ class TrajectoryTracker(Node):
         self.y_err_int = 0.0
         self.v_err_int = 0.0
         self.theta_err_int = 0.0
+        self.x_err_last = 0.0
+        self.y_err_last = 0.0
+        self.v_err_last = 0.0
+        self.theta_err_last = 0.0
         self.t_last = self.get_clock().now()
 
         #TODO create parameter for timer period
@@ -90,11 +98,11 @@ class TrajectoryTracker(Node):
 
         self.get_logger().info(f'Trajectory received: {self.cur_traj}')
 
-        # Zero all integrator errors to mitigate integral windup
-        self.x_err_int = 0.0
-        self.y_err_int = 0.0
-        self.v_err_int = 0.0
-        self.theta_err_int = 0.0
+        # # Zero all integrator errors to mitigate integral windup
+        # self.x_err_int = 0.0
+        # self.y_err_int = 0.0
+        # self.v_err_int = 0.0
+        # self.theta_err_int = 0.0
 
     def main_cb(self):
         now = self.get_clock().now()
@@ -115,50 +123,80 @@ class TrajectoryTracker(Node):
             t = (now - t0).nanoseconds*1e-9
             dt = (now - self.t_last).nanoseconds*1e-9
 
-            if t > self.cur_traj.tf:
-                t = self.cur_traj.tf
-            elif t < self.cur_traj.t0:
-                t = self.cur_traj.t0
+            t = _clip(t, self.cur_traj.t0, self.cur_traj.tf)
 
             x_veh = self.pose[0]
             y_veh = self.pose[1]
             theta_veh = self.pose[2]
             v_veh = self.speed
 
-            x_ref = self.cur_traj.x(t).squeeze()
-            y_ref = self.cur_traj.y(t).squeeze()
-            xdot_ref = self.cur_traj.diff().x(t).squeeze()
-            ydot_ref = self.cur_traj.diff().y(t).squeeze()
-            v_ref = np.linalg.norm((xdot_ref, ydot_ref))
-            theta_ref = np.arctan2(ydot_ref, xdot_ref)
+            x_ref = float(self.cur_traj.x(t).squeeze())
+            y_ref = float(self.cur_traj.y(t).squeeze())
+            xdot_ref = float(self.cur_traj.diff().x(t).squeeze())
+            ydot_ref = float(self.cur_traj.diff().y(t).squeeze())
+            v_ref = float(np.linalg.norm((xdot_ref, ydot_ref)))
+            theta_ref = float(np.arctan2(ydot_ref, xdot_ref))
 
             x_err = np.cos(theta_veh)*(x_ref - x_veh) + np.sin(theta_veh)*(y_ref - y_veh)
             y_err = -np.sin(theta_veh)*(x_ref - x_veh) + np.cos(theta_veh)*(y_ref - y_veh)
-            if np.abs(x_err) > 1e3 or np.abs(y_err) > 1e3:
-                self.get_logger().info(f'Large error!\n{theta_veh=}\n{x_veh=}\n{y_veh=}\n{x_ref=}\n{y_ref=}')
+            # if np.abs(x_err) > 1e3 or np.abs(y_err) > 1e3:
+            #     self.get_logger().info(f'Large error!\n{theta_veh=}\n{x_veh=}\n{y_veh=}\n{x_ref=}\n{y_ref=}')
             theta_err = theta_ref - theta_veh
             v_err = v_ref - v_veh
 
+            d_x_err = (x_err - self.x_err_last)/dt
+            d_y_err = (y_err - self.y_err_last)/dt
+            d_v_err = (v_err - self.v_err_last)/dt
+            d_theta_err = (theta_err - self.theta_err_last)/dt
+
+            self.x_err_last = x_err
+            self.y_err_last = y_err
+            self.v_err_last = v_err
+            self.theta_err_last = theta_err
+
+            # Add the initial position of the robot to the ref values for easy debugging
+            self.x_ref_pub.publish(Float64(data=x_ref+532.))
+            self.y_ref_pub.publish(Float64(data=y_ref-162.))
+            self.theta_ref_pub.publish(Float64(data=theta_ref))
+            self.speed_ref_pub.publish(Float64(data=v_ref))
             self.x_err_pub.publish(Float64(data=x_err))
             self.y_err_pub.publish(Float64(data=y_err))
             self.theta_err_pub.publish(Float64(data=theta_err))
-            self.speed_err_pub.publish(Float64(data=v_err))
+            # self.speed_err_pub.publish(Float64(data=v_err))
 
-            v_cmd = v_ref*np.cos(theta_err) + kp_pos*x_err + ki_pos*self.x_err_int + kv_pos*v_err
-            w_cmd = kp_theta*theta_err + ki_theta*self.theta_err_int
+            # v_cmd = v_ref + kp_pos*x_err + ki_pos*self.x_err_int + kv_pos*v_err
+            # w_cmd = kp_theta*theta_err + ki_theta*self.theta_err_int
+            # w_cmd = 0.5*kp_theta*(np.sin(theta_ref)*np.cos(theta_veh) - np.cos(theta_ref)*np.sin(theta_veh))
+
+            v_cmd = v_ref + kp_pos*x_err + ki_pos*self.x_err_int #+ kv_pos*v_err
+            w_cmd = kp_theta*y_err + ki_theta*self.y_err_int + kd_theta*d_theta_err
 
             thrust_right = v_cmd + w_cmd
             thrust_left = v_cmd - w_cmd
 
+            # Clip the thrusts and also avoid integrator windup
+            if thrust_right > 400 or thrust_right < -400 or thrust_left > 400 or thrust_right < -400:
+                thrust_right = _clip(thrust_right, -400., 400.)
+                thrust_left = _clip(thrust_left, -400., 400.)
+            else:
+                self.x_err_int += x_err*dt
+                self.y_err_int += y_err*dt
+                # self.v_err_int += v_err*dt
+                # self.theta_err_int += theta_err*dt
+
             self.thruster_left_pub.publish(Float64(data=thrust_left))
             self.thruster_right_pub.publish(Float64(data=thrust_right))
 
-            self.x_err_int += x_err*dt
-            self.y_err_int += y_err*dt
-            self.v_err_int += v_err*dt
-            self.theta_err_int += theta_err*dt
-
         self.t_last = now
+
+
+def _clip(val, min_val, max_val):
+    if val < min_val:
+        val = min_val
+    elif val > max_val:
+        val = max_val
+
+    return val
 
 
 def main(args=None):
@@ -170,6 +208,9 @@ def main(args=None):
     except KeyboardInterrupt:
         trajectory_tracker.get_logger().info('Keyboard interrupt. Quitting.')
     finally:
+        # Make sure we tell the boat to stop before turning off the controller
+        trajectory_tracker.thruster_left_pub.publish(Float64(data=0.0))
+        trajectory_tracker.thruster_right_pub.publish(Float64(data=0.0))
         # Destroy the node explicitly
         # (optional - otherwise it will be done automatically
         # when the garbage collector destroys the node object)

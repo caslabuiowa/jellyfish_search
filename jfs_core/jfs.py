@@ -126,6 +126,9 @@ def _discrete_to_bernstein(traj, degree):
     cpts = traj[0][idxs, :].T
     tf = traj[1]
 
+    if tf < 1e-1:
+        tf = 1e-1
+
     traj_bp = Bernstein(cpts=cpts, t0=0.0, tf=tf)
 
     return traj_bp
