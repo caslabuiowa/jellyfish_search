@@ -4,6 +4,7 @@ import numpy as np
 from rcl_interfaces.msg import ParameterDescriptor
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from rclpy.time import Time
 from scipy.spatial.transform import Rotation as R
 from tf2_ros import TransformException
@@ -75,7 +76,8 @@ class TrajectoryGenerator(Node):
                                                 self.obstacle_cb, 10)
         self.pos_sub = self.create_subscription(Odometry,
                                                 self.get_parameter('pose_topic').value,
-                                                self.pose_cb, 10)
+                                                self.pose_cb, QoSProfile(depth=10,
+                                                                         reliability=QoSReliabilityPolicy.BEST_EFFORT))
         self.goal_sub = self.create_subscription(PoseStamped,
                                                  self.get_parameter('goal_topic').value,
                                                  self.goal_cb, 10)

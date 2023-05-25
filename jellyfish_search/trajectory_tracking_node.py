@@ -11,6 +11,7 @@ from scipy.spatial.transform import Rotation as R
 import rclpy
 from rclpy.duration import Duration
 from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from rclpy.time import Time
 from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
@@ -36,12 +37,14 @@ class TrajectoryTracker(Node):
                 ('gain_theta_p', 1.0),
                 ('gain_theta_i', 1.0),
                 ('gain_theta_d', 1.0),
+                ('odom_topic', 'odometry'),
+                ('cmd_vel_topic', 'cmd_vel'),
                 ('world_frame_id', 'world'),
                 ('robot_frame_id', 'base_link')
                 ]
             )
 
-        self.cmd_vel_pub = self.create_publisher(TwistStamped, 'cmd_vel', 10)
+        self.cmd_vel_pub = self.create_publisher(TwistStamped, self.get_parameter('cmd_vel_topic').value, 10)
         self.x_ref_pub = self.create_publisher(Float64, 'x_ref', 10)
         self.y_ref_pub = self.create_publisher(Float64, 'y_ref', 10)
         self.theta_ref_pub = self.create_publisher(Float64, 'theta_ref', 10)
@@ -51,8 +54,8 @@ class TrajectoryTracker(Node):
         self.theta_err_pub = self.create_publisher(Float64, 'theta_err', 10)
         self.speed_err_pub = self.create_publisher(Float64, 'speed_err', 10)
 
-        self.odom_sub = self.create_subscription(Odometry, 'wamv/sensors/position/ground_truth_odometry',
-                                                 self.odom_cb, 10)
+        self.odom_sub = self.create_subscription(Odometry, self.get_parameter('odom_topic').value, self.odom_cb,
+                                                 QoSProfile(depth=10, reliability=QoSReliabilityPolicy.BEST_EFFORT))
         self.traj_sub = self.create_subscription(BernsteinTrajectory, 'bebot_trajectory', self.traj_cb, 10)
 
         self._tf_buffer = Buffer()
@@ -139,7 +142,7 @@ class TrajectoryTracker(Node):
             d_x_err = (x_err - self.x_err_last)/dt
             d_y_err = (y_err - self.y_err_last)/dt
             d_v_err = (v_err - self.v_err_last)/dt
-            d_theta_err = (theta_err - self.theta_err_wamvlast)/dt
+            d_theta_err = (theta_err - self.theta_err_last)/dt
 
             self.x_err_last = x_err
             self.y_err_last = y_err
@@ -169,6 +172,8 @@ class TrajectoryTracker(Node):
             cmd_vel_msg.twist.linear.x = v_cmd
             cmd_vel_msg.twist.angular.z = w_cmd
 
+            self.cmd_vel_pub.publish(cmd_vel_msg)
+
         self.t_last = now
 
 
@@ -190,9 +195,6 @@ def main(args=None):
     except KeyboardInterrupt:
         trajectory_tracker.get_logger().info('Keyboard interrupt. Quitting.')
     finally:
-        # Make sure we tell the boat to stop before turning off the controller
-        trajectory_tracker.thruster_left_pub.publish(Float64(data=0.0))
-        trajectory_tracker.thruster_right_pub.publish(Float64(data=0.0))
         # Destroy the node explicitly
         # (optional - otherwise it will be done automatically
         # when the garbage collector destroys the node object)

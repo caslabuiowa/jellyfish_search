@@ -1,6 +1,6 @@
 /**:
     ros__parameters:
-        use_sim_time: True
+        use_sim_time: False # True
 
 obstacle_detector:
     ros__parameters:
@@ -8,7 +8,7 @@ obstacle_detector:
         obstacle_publish_frequency: 10
         # Frame ID for the obstacles, default: 'world'
         obstacle_frame_id: 'map'
-        obstacle_file: 'short_navigation_course_2.json'
+        obstacle_file: 'obstacles.json' #'short_navigation_course_2.json'
 
 trajectory_generator:
     ros__parameters:
@@ -19,9 +19,9 @@ trajectory_generator:
         maximum_speed: 10.0
         maximum_angular_rate: 0.7853981633974483
         trajectory_frame_id: 'odom'
-        vehicle_frame_id: 'wamv'
+        vehicle_frame_id: 'base_link' #'wamv'
         obstacle_topic: 'obstacles'
-        pose_topic: 'wamv/sensors/position/ground_truth_odometry'
+        pose_topic: '/mavros/global_position/local' #'wamv/sensors/position/ground_truth_odometry'
         goal_topic: 'goal'
         rng_seed: -1
         obstacle_position_std: 0.0
@@ -39,11 +39,13 @@ trajectory_generator:
 
 trajectory_tracker:
     ros__parameters:
-        gain_pos_p: 100.0
-        gain_pos_i: 0.0
+        gain_pos_p: 1.0
+        gain_pos_i: 0.1
         gain_pos_v: 0.0
-        gain_theta_p: 100.0
+        gain_theta_p: 0.3
         gain_theta_i: 0.0
         gain_theta_d: 0.0
         world_frame_id: 'world'
-        robot_frame_id: 'wamv'
+        robot_frame_id: 'base_link' #'wamv'
+        odom_topic: '/mavros/global_position/local' #'wamv/sensors/position/ground_truth_odometry'
+        cmd_vel_topic: '/mavros/setpoint_velocity/cmd_vel'

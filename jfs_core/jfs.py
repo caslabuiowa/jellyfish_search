@@ -74,25 +74,30 @@ class JellyfishSearch:
 
 def _traj_gen_wrapper(x0, goal, obstacles, obstacle_safe_distances, rng_seed, obs_pos_std, obs_size_std, goal_pos_std,
                       vmax, wmax, rsafe, degree, discrete, solver_params):
-    rng = np.random.default_rng(rng_seed)
-    goal_tmp = goal + rng.normal(scale=goal_pos_std, size=goal.size)
-    if len(obstacles[0]) > 0:
-        obs_tmp = np.array([obs + rng.normal(scale=obs_pos_std, size=2) for obs in obstacles])
-        obs_dsafe_tmp = np.array([obs_dist + np.abs(rng.normal(scale=obs_size_std))
-                               for obs_dist in obstacle_safe_distances])
-        discrete_traj = fast_generate_cbf_trajectory(x0, goal_tmp, obs_tmp, obs_dsafe_tmp, **solver_params)
-    else:
-        discrete_traj = fast_generate_cbf_trajectory_no_obs(x0, goal_tmp, **solver_params)
+    try:
+        rng = np.random.default_rng(rng_seed)
+        goal_tmp = goal + rng.normal(scale=goal_pos_std, size=goal.size)
+        if len(obstacles[0]) > 0:
+            obs_tmp = np.array([obs + rng.normal(scale=obs_pos_std, size=2) for obs in obstacles])
+            obs_dsafe_tmp = np.array([obs_dist + np.abs(rng.normal(scale=obs_size_std))
+                                   for obs_dist in obstacle_safe_distances])
+            discrete_traj = fast_generate_cbf_trajectory(x0, goal_tmp, obs_tmp, obs_dsafe_tmp, **solver_params)
+        else:
+            discrete_traj = fast_generate_cbf_trajectory_no_obs(x0, goal_tmp, **solver_params)
 
-    if discrete:
-        return discrete_traj
+        if discrete:
+            return discrete_traj
 
-    traj = _discrete_to_bernstein(discrete_traj, degree)
+        traj = _discrete_to_bernstein(discrete_traj, degree)
 
-    if _feasibility_check(traj, obstacle_safe_distances, obstacles, vmax, wmax, rsafe):
-        cost = _cost_fn(traj, goal)
-    else:
-        cost = np.inf
+        if _feasibility_check(traj, obstacle_safe_distances, obstacles, vmax, wmax, rsafe):
+            cost = _cost_fn(traj, goal)
+        else:
+            cost = np.inf
+    except ZeroDivisionError as e:
+        print(f'[!] Warning: {e}, generating new trajectory.')
+        traj, cost = _traj_gen_wrapper(x0, goal, obstacles, obstacle_safe_distances, rng_seed.spawn(1)[0], obs_pos_std,
+                                       obs_size_std, goal_pos_std, vmax, wmax, rsafe, degree, discrete, solver_params)
 
     return (traj, cost)
 
