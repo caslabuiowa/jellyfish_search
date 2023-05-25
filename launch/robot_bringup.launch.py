@@ -30,7 +30,7 @@ def generate_launch_description():
         package='jellyfish_search',
         namespace='',
         executable='jellyfish_controller',
-        name='jellyfish_controller',
+        name='trajectory_generator',
         parameters=[config]
         )
 
