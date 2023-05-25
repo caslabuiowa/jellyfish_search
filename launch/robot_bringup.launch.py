@@ -54,7 +54,7 @@ def generate_launch_description():
         XMLLaunchDescriptionSource(
             os.path.join(get_package_share_directory('mavros'), 'launch', 'apm.launch')
             ),
-        launch_arguments={'fcu_url': '/dev/ttyACM0'}.items()
+        launch_arguments={'fcu_url': 'udp://:14540@'}.items()
         )
 
     return LaunchDescription([
