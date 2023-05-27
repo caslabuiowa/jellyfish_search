@@ -27,7 +27,7 @@ trajectory_generator:
         obstacle_position_std: 0.0
         obstacle_size_std: 0.3
         goal_position_std: 6.0
-        trajectory_generation_period: 20.0
+        trajectory_generation_period: 10.0
         publish_traj_array: True
         solver_params:
             n_steps: 600
@@ -39,12 +39,12 @@ trajectory_generator:
 
 trajectory_tracker:
     ros__parameters:
-        gain_pos_p: 1.0
+        gain_pos_p: 1.5
         gain_pos_i: 0.1
         gain_pos_v: 0.0
-        gain_theta_p: 0.3
+        gain_theta_p: 0.1
         gain_theta_i: 0.0
-        gain_theta_d: 0.0
+        gain_theta_d: 0.05
         world_frame_id: 'world'
         robot_frame_id: 'base_link' #'wamv'
         odom_topic: '/mavros/global_position/local' #'wamv/sensors/position/ground_truth_odometry'
