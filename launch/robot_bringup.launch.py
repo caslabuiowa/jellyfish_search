@@ -26,6 +26,11 @@ def generate_launch_description():
         'params.yaml'
         )
 
+    rosbag_recorder = ExecuteProcess(
+        cmd=['ros2', 'bag', 'record', '-a'],
+        output='screen'
+        )
+
     jfs_controller_node = Node(
         package='jellyfish_search',
         namespace='',
@@ -61,5 +66,6 @@ def generate_launch_description():
         jfs_controller_node,
         jfs_tt_node,
         jfs_obstacle_node,
-        mavros_apm_launch
+        mavros_apm_launch,
+        rosbag_recorder
     ])
