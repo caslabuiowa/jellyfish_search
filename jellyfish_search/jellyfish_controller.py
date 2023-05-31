@@ -15,7 +15,8 @@ from geometry_msgs.msg import Point, PoseStamped
 from jellyfish_search_msgs.msg import BernsteinTrajectory, BernsteinTrajectoryArray, ObstacleArray
 from nav_msgs.msg import Odometry
 
-from jfs_core.jfs import JellyfishSearch
+from BeBOT.polynomial.bernstein import Bernstein
+from jfs_core.jfs import JellyfishSearch, _feasibility_check
 
 
 #TODO
@@ -70,6 +71,7 @@ class TrajectoryGenerator(Node):
         self.traj_pub = self.create_publisher(BernsteinTrajectory, 'bebot_trajectory', 10)
         if self.get_parameter('publish_traj_array').value:
             self.traj_array_pub = self.create_publisher(BernsteinTrajectoryArray, 'bebot_trajectory_array', 10)
+        self.obs_dist_pub = self.create_publisher(BernsteinTrajectoryArray, 'obstacle_distances', 10)
 
         self.obs_sub = self.create_subscription(ObstacleArray,
                                                 self.get_parameter('obstacle_topic').value,
@@ -164,12 +166,21 @@ class TrajectoryGenerator(Node):
         elif self.goal is None:
             self.get_logger().info('Waiting for goal.')
         else:
+            self.get_logger().info('=======================')
             #TODO: Perception radius vs safe planning radius. The goal is perturbed a ton which would bring a lot of
             # trajectories outside of the safe sphere resulting in many infeasible trajectories. For now, rsafe is
             # being set to a very large number, effectively negating it
             rsafe = 100
+
+            # Use our initial pose for x0 if we haven't generated a trajectory yet. Otherwise, always use past
+            # trajectories to maintain continuity
+            if self.x_pred is None:
+                x0 = self.pose[:2]
+            else:
+                x0 = self.x_pred
+
             perception_rad = self.get_parameter('perception_radius').value
-            cur_goal = project_goal(self.pose[:2], perception_rad, self.goal[:2])
+            cur_goal = project_goal(x0, perception_rad, self.goal[:2])
             solver_params = dict(n_steps=self.get_parameter('solver_params.n_steps').value,
                                  tf_max=self.get_parameter('solver_params.tf_max').value,
                                  Katt=self.get_parameter('solver_params.Katt').value,
@@ -177,8 +188,8 @@ class TrajectoryGenerator(Node):
                                  rho_0=self.get_parameter('solver_params.rho_0').value,
                                  delta=self.get_parameter('solver_params.delta').value)
 
-            obstacles = self.obstacles
-            obstacle_safe_distances = self.obstacle_safe_distances
+            obstacles = self.obstacles.copy()
+            obstacle_safe_distances = self.obstacle_safe_distances.copy()
             num_trajectories = self.get_parameter('num_trajectories').value
             vmax = self.get_parameter('maximum_speed').value
             wmax = self.get_parameter('maximum_angular_rate').value
@@ -198,10 +209,7 @@ class TrajectoryGenerator(Node):
             #     elif t < self.previous_trajectory.t0:
             #         t = self.previous_trajectory.t0
             #     x0 = self.previous_trajectory(t).squeeze()
-            if self.x_pred is None:
-                x0 = self.pose[:2]
-            else:
-                x0 = self.x_pred
+
 
             d_goal = np.linalg.norm(cur_goal - x0)
             goal_pos_std *= (1 - np.exp(-d_goal/10))
@@ -210,6 +218,8 @@ class TrajectoryGenerator(Node):
             self.get_logger().info(f'{cur_goal=}')
             self.get_logger().info(f'{d_goal=}')
             self.get_logger().info(f'{goal_pos_std=}')
+            self.get_logger().info(f'{obstacles=}')
+            self.get_logger().info(f'{obstacle_safe_distances=}')
 
             result = self.jfs.generate_trajectories(x0,
                                                     cur_goal,
@@ -226,23 +236,39 @@ class TrajectoryGenerator(Node):
                                                     solver_params)
 
             if result[0][1] == np.inf:
-                self.get_logger().warning('Best trajectory is infeasible')
+                self.get_logger().warning('Best trajectory is infeasible, recomputing.')
+                self.main_cb()
             else:
                 traj = result[0][0]
                 cost = result[0][1]
                 self.get_logger().info(f'Best trajectory: {traj}\ncost: {cost}')
+                self.get_logger().info(f'Feasibility Check: {_feasibility_check(traj, obstacle_safe_distances, obstacles, vmax, wmax, rsafe)}')
+
+                # Log obstacle distances for the chosen trajectory for debugging
+                distances = log_obstacles(traj, obstacles, obstacle_safe_distances)
+                obs_dist_msg = BernsteinTrajectoryArray()
+                for dist in distances:
+                    dist_msg = self.create_bt_msg(dist.cpts, dist.t0, dist.tf)
+                    obs_dist_msg.trajectories.append(dist_msg)
+                self.obs_dist_pub.publish(obs_dist_msg)
+
+                # Manually compute the distance between the vehicle and obstacles
+                for i, dist in enumerate(distances):
+                    if np.any((dist.elev(20).cpts.squeeze() - obstacle_safe_distances[i]**2) < 0):
+                        print('traj not feasible')
+                        self.get_logger().info(f'{(dist.elev(20).cpts.squeeze() - obstacle_safe_distances[i]**2)=}')
 
                 traj_msg = self.create_bt_msg(traj.cpts, traj.t0, traj.tf)
                 self.traj_pub.publish(traj_msg)
 
-                t = self.get_parameter('trajectory_generation_period').value
-                if t > traj.tf:
-                    t = traj.tf
-                elif t < traj.t0:
-                    t = traj.t0
+                t_pred = self.get_parameter('trajectory_generation_period').value
+                if t_pred > traj.tf:
+                    t_pred = traj.tf
+                elif t_pred < traj.t0:
+                    t_pred = traj.t0
                 # self.previous_trajectory = traj
                 # self.previous_time = Time.from_msg(traj_msg.header.stamp)
-                self.x_pred = traj(t).squeeze()
+                self.x_pred = traj(t_pred).squeeze()
 
             if self.get_parameter('publish_traj_array').value:
                 traj_array_msg = BernsteinTrajectoryArray()
@@ -252,6 +278,8 @@ class TrajectoryGenerator(Node):
                     traj_array_msg.trajectories.append(traj_msg)
                 self.traj_array_pub.publish(traj_array_msg)
 
+            self.get_logger().info('=======================')
+
     def create_bt_msg(self, cpts, t0, tf):
         bt = BernsteinTrajectory()
         bt.header.frame_id = self.get_parameter('trajectory_frame_id').value
@@ -259,7 +287,10 @@ class TrajectoryGenerator(Node):
 
         bt.t0 = float(t0)
         bt.tf = float(tf)
-        bt.cpts = [Point(x=pt[0], y=pt[1]) for pt in cpts.T]
+        try:
+            bt.cpts = [Point(x=pt[0], y=pt[1]) for pt in cpts.T]
+        except IndexError:
+            bt.cpts = [Point(x=pt[0]) for pt in cpts.T]
 
         return bt
 
@@ -276,6 +307,23 @@ def project_goal(x, rsafe, goal):
         new_goal = goal
 
     return new_goal
+
+
+def log_obstacles(traj, obstacles, obstacle_safe_distances):
+    ndim = traj.dim
+    n = traj.deg
+    t0 = traj.t0
+    tf = traj.tf
+
+    distances = []
+    for i, obs in enumerate(obstacles):
+        cpts = np.array([[j]*(n+1) for j in obs[:ndim]], dtype=float)
+        c_obs = Bernstein(cpts, t0, tf)
+
+        dist = (traj - c_obs).normSquare()
+        distances.append(dist)
+
+    return distances
 
 
 def main(args=None):

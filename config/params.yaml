@@ -8,14 +8,14 @@ obstacle_detector:
         obstacle_publish_frequency: 10
         # Frame ID for the obstacles, default: 'world'
         obstacle_frame_id: 'map'
-        obstacle_file: 'obstacles.json' #'short_navigation_course_2.json'
+        obstacle_file: 'minefield.json' #'short_navigation_course_2.json'
 
 trajectory_generator:
     ros__parameters:
         # Maximum radius at which the vehicle can detect obstacles (m), default: 10
-        perception_radius: 50.0
+        perception_radius: 30.0
         num_workers: 10
-        num_trajectories: 100
+        num_trajectories: 300
         maximum_speed: 10.0
         maximum_angular_rate: 0.7853981633974483
         trajectory_frame_id: 'odom'
@@ -30,12 +30,12 @@ trajectory_generator:
         trajectory_generation_period: 10.0
         publish_traj_array: True
         solver_params:
-            n_steps: 600
-            tf_max: 120.0
+            n_steps: 300
+            tf_max: 45.0
             Katt: 1.0
             Krep: 1.0
-            rho_0: 1.0
-            delta: 0.0
+            rho_0: 100.0
+            delta: 0.3
 
 trajectory_tracker:
     ros__parameters:

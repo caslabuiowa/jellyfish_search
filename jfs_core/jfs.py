@@ -5,7 +5,8 @@ Created on Mon Apr 17 11:39:45 2023
 
 @author: magicbycalvin
 """
-
+import logging
+logging.basicConfig(filename='jfs.log', level=logging.DEBUG)
 import multiprocessing as mp
 
 import numpy as np
@@ -31,8 +32,10 @@ class JellyfishSearch:
                               solver_params={}):
         seed_seq = np.random.SeedSequence(self._rng_seed)
         rng_seeds = seed_seq.spawn(num_trajectories)
-        print(f'Current goal from JFS: {goal}')
-        print(f'Goal position std: {goal_pos_std}')
+        logging.info(f'Current goal from JFS: {goal}')
+        logging.info(f'Goal position std: {goal_pos_std}')
+        logging.info(f'Obstacles: {obstacles}')
+        logging.info(f'Obstacle safe distances: {obstacle_safe_distances}')
         results = self._pool.starmap(_traj_gen_wrapper, zip([x0]*num_trajectories,
                                                             [goal]*num_trajectories,
                                                             [obstacles]*num_trajectories,
@@ -78,9 +81,10 @@ def _traj_gen_wrapper(x0, goal, obstacles, obstacle_safe_distances, rng_seed, ob
         rng = np.random.default_rng(rng_seed)
         goal_tmp = goal + rng.normal(scale=goal_pos_std, size=goal.size)
         if len(obstacles[0]) > 0:
-            obs_tmp = np.array([obs + rng.normal(scale=obs_pos_std, size=2) for obs in obstacles])
+            # obs_tmp = np.array([obs + rng.normal(scale=obs_pos_std, size=2) for obs in obstacles])
+            obs_tmp = np.array(obstacles)
             obs_dsafe_tmp = np.array([obs_dist + np.abs(rng.normal(scale=obs_size_std))
-                                   for obs_dist in obstacle_safe_distances])
+                                      for obs_dist in obstacle_safe_distances])
             discrete_traj = fast_generate_cbf_trajectory(x0, goal_tmp, obs_tmp, obs_dsafe_tmp, **solver_params)
         else:
             discrete_traj = fast_generate_cbf_trajectory_no_obs(x0, goal_tmp, **solver_params)
@@ -103,6 +107,9 @@ def _traj_gen_wrapper(x0, goal, obstacles, obstacle_safe_distances, rng_seed, ob
 
 
 def _feasibility_check(traj, safe_distances, obstacles, vmax, wmax, rsafe):
+    logging.info(f'Trajectory: t0 = {traj.t0}, tf = {traj.tf}')
+    for pt in traj.cpts.T:
+        logging.info(f'    x: {pt[0]:0.3}, y: {pt[1]:0.3}')
     constraints = [
         CollisionAvoidance(safe_distances, obstacles, elev=20),
         MaximumSpeed(vmax),
@@ -114,6 +121,7 @@ def _feasibility_check(traj, safe_distances, obstacles, vmax, wmax, rsafe):
     for cons in constraints:
         if not cons.call([traj]):
             feasible = False
+            break
 
     return feasible
 

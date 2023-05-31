@@ -29,6 +29,7 @@ setup(
             'jellyfish_controller = jellyfish_search.jellyfish_controller:main',
             'obstacle_detector = jellyfish_search.obstacle_detection_node:main',
             'trajectory_tracker = jellyfish_search.trajectory_tracking_node:main',
+            'sim_vehicle = sim.vehicle:main',
         ],
     },
 )

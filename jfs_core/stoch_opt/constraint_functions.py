@@ -7,10 +7,18 @@ Created on Tue Mar 22 10:22:54 2022
 """
 
 from abc import ABC, abstractmethod
+import logging
+import logging.config
+from os import path
 
 import numpy as np
 
 from BeBOT.polynomial.bernstein import Bernstein
+
+
+logging_conf_path = path.join(path.dirname(path.abspath(__file__)), 'logging.conf')
+logging.config.fileConfig(logging_conf_path)
+logger = logging.getLogger(__name__)
 
 
 class ConstraintBase(ABC):
@@ -30,11 +38,13 @@ class CollisionAvoidance(ConstraintBase):
         self.safe_dist = safe_dist
         self.obstacles = obstacles
         self.elev = elev
+        logger.info(f'{safe_dist=}\n{obstacles=}')
 
     def call(self, trajs):
         if len(self.obstacles[0]) == 0:
             return True
 
+        result = True
         for traj in trajs:
             ndim = traj.dim
             n = traj.deg
@@ -42,10 +52,10 @@ class CollisionAvoidance(ConstraintBase):
             tf = traj.tf
 
             for i, obs in enumerate(self.obstacles):
-                cpts = np.array([[i]*(n+1) for i in obs[:ndim]], dtype=float)
+                cpts = np.array([[j]*(n+1) for j in obs[:ndim]], dtype=float)
                 c_obs = Bernstein(cpts, t0, tf)
 
-                dist = (traj - c_obs).normSquare().elev(self.elev).cpts
+                dist = (traj - c_obs).normSquare().elev(self.elev).cpts.squeeze()
 
                 # if type(self.safe_dist) is list:
                 #     if np.any(dist - self.safe_dist[i]**2 < 0):
@@ -55,9 +65,19 @@ class CollisionAvoidance(ConstraintBase):
                 #         return False
 
                 try:
-                    result = np.all(dist - self.safe_dist[i]**2 >= 0)
+                    safe_dist = self.safe_dist[i]
+                    # result = np.all((dist - self.safe_dist[i]**2) >= 0)
                 except TypeError:
-                    result = np.all(dist - self.safe_dist**2 >= 0)
+                    safe_dist = self.safe_dist
+                    # result = np.all((dist - self.safe_dist**2) >= 0)
+
+                for val in dist:
+                    if (val - safe_dist**2) < 0:
+                        result = False
+                        # logger.info((f'==============\n{t0=}, {tf=},\n{dist=}\n{c_obs=}\n{traj=}\n'
+                        #              f'{np.all((dist - self.safe_dist[i]**2) >= 0)=}\n'
+                        #              f'{(dist - self.safe_dist[i]**2)=}\n'
+                        #              '=============='))
 
         return result
 
