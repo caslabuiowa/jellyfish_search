@@ -18,6 +18,8 @@ from rclpy.node import Node
 from jellyfish_search_msgs.msg import Obstacle, ObstacleArray
 
 
+#TODO:
+# * Use a KD Tree to search for only the obstacles that are within some radius of the vehicle
 class ObstacleDetector(Node):
     def __init__(self):
         super().__init__('obstacle_detector')

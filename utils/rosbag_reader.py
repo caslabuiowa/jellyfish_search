@@ -127,7 +127,7 @@ if __name__ == '__main__':
         ax3.add_artist(Circle(obs[:2], radius=obs[-1]))
     for traj_msg in trajectories:
         traj = traj_msg_to_bern(traj_msg)
-        traj.plot(ax3, showCpts=False)
+        traj.plot(ax3, showCpts=False, zorder=10)
     for traj_array in traj_arrays:
         for traj_msg in traj_array['trajectories']:
             traj = traj_msg_to_bern(traj_msg)

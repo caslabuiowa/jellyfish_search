@@ -13,7 +13,7 @@ import numpy as np
 
 
 if __name__ == '__main__':
-    fname = '/home/magicbycalvin/ros2_ws/src/jellyfish_search/config/obstacles.json'
+    fname = '/home/magicbycalvin/ros2_ws/src/jellyfish_search/config/minefield_small.json'
 
     with open(fname, 'r') as f:
         obstacles = np.array(json.load(f))

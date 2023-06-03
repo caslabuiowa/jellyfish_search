@@ -36,7 +36,8 @@ if __name__ == '__main__':
     ###
     # Trajectories
     ###
-    fname = '/home/magicbycalvin/Desktop/JFS_testing/rosbag2_2023_05_31-12_19_34/rosbag2_2023_05_31-12_19_34_0.db3'
+    # fname = '/home/magicbycalvin/Desktop/JFS_testing/rosbag2_2023_05_31-12_19_34/rosbag2_2023_05_31-12_19_34_0.db3'
+    fname = '/home/magicbycalvin/Desktop/JFS_testing/rosbag2_2023_05_31-13_42_40/rosbag2_2023_05_31-13_42_40_0.db3'
 
     reader = Reader(filepath=fname)
     t0 = next(reader)['time_ns']
