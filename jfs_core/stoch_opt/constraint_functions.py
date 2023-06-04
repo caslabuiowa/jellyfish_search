@@ -74,6 +74,9 @@ class CollisionAvoidance(ConstraintBase):
                 for val in dist:
                     if (val - safe_dist**2) < 0:
                         result = False
+                        #TODO: Return false here so that we don't waste computation time making more checks on
+                        # an infeasible trajectory.
+
                         # logger.info((f'==============\n{t0=}, {tf=},\n{dist=}\n{c_obs=}\n{traj=}\n'
                         #              f'{np.all((dist - self.safe_dist[i]**2) >= 0)=}\n'
                         #              f'{(dist - self.safe_dist[i]**2)=}\n'

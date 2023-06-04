@@ -10,6 +10,7 @@ import json
 from matplotlib.patches import Circle
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 from nml_bag import Reader
 
@@ -32,7 +33,7 @@ if __name__ == '__main__':
     ###
     # Trajectories
     ###
-    fname = '/home/magicbycalvin/Desktop/rosbag2_2023_05_30-09_03_31/rosbag2_2023_05_30-09_03_31_0.db3'
+    fname = '/home/magicbycalvin/Desktop/rosbag2_2023_06_03-20_30_43/rosbag2_2023_06_03-20_30_43_0.db3'
     # topics = ['/bebot_trajectory',
     #           '/bebot_trajectory_array',
     #           '/goal',
@@ -54,27 +55,42 @@ if __name__ == '__main__':
     reader = Reader(filepath=fname)
     t0 = next(reader)['time_ns']
 
-    x_err_reader = Reader(filepath=fname, topics=['/x_err'])
-    y_err_reader = Reader(filepath=fname, topics=['/y_err'])
-    x_ref_reader = Reader(filepath=fname, topics=['/x_ref'])
-    y_ref_reader = Reader(filepath=fname, topics=['/y_ref'])
+    # x_err_reader = Reader(filepath=fname, topics=['/x_err'])
+    # y_err_reader = Reader(filepath=fname, topics=['/y_err'])
+    # x_ref_reader = Reader(filepath=fname, topics=['/x_ref'])
+    # y_ref_reader = Reader(filepath=fname, topics=['/y_ref'])
+    pose_ref_reader = Reader(filepath=fname, topics=['/pose_ref'])
+    twist_ref_reader = Reader(filepath=fname, topics=['/twist_ref'])
     goal_reader = Reader(filepath=fname, topics=['/goal'])
     gps_reader = Reader(filepath=fname, topics=['/mavros/global_position/local'])
     state_reader = Reader(filepath=fname, topics=['/mavros/state'])
     traj_reader = Reader(filepath=fname, topics=['/bebot_trajectory'])
     traj_array_reader = Reader(filepath=fname, topics=['/bebot_trajectory_array'])
 
-    x_err = np.array([((i['time_ns']-t0)*1e-9, i['data']) for i in x_err_reader])
-    y_err = np.array([((i['time_ns']-t0)*1e-9, i['data']) for i in y_err_reader])
-    x_ref = np.array([((i['time_ns']-t0)*1e-9, i['data']) for i in x_ref_reader])
-    y_ref = np.array([((i['time_ns']-t0)*1e-9, i['data']) for i in y_ref_reader])
+    # x_err = np.array([((i['time_ns']-t0)*1e-9, i['data']) for i in x_err_reader])
+    # y_err = np.array([((i['time_ns']-t0)*1e-9, i['data']) for i in y_err_reader])
+    pose_ref = [((i['time_ns'] - t0)*1e-9, i['pose']) for i in pose_ref_reader]
+    t_ref = np.array([i[0] for i in pose_ref])
+    x_ref = np.array([i[1]['position']['x'] for i in pose_ref])
+    y_ref = np.array([i[1]['position']['y'] for i in pose_ref])
+    psi_ref = np.array([R.from_quat([
+        i[1]['orientation']['x'],
+        i[1]['orientation']['y'],
+        i[1]['orientation']['z'],
+        i[1]['orientation']['w']]).as_euler('xyz')[2] for i in pose_ref])
+    twist_ref = [((i['time_ns'] - t0)*1e-9, i['twist']) for i in twist_ref_reader]
     goal_pos = np.array([((i['time_ns']-t0)*1e-9,
                           i['pose']['position']['x'],
                           i['pose']['position']['y'])
                          for i in goal_reader])
     gps = np.array([((i['time_ns']-t0)*1e-9,
                      i['pose']['pose']['position']['x'],
-                     i['pose']['pose']['position']['y'])
+                     i['pose']['pose']['position']['y'],
+                     R.from_quat([
+                         i['pose']['pose']['orientation']['x'],
+                         i['pose']['pose']['orientation']['y'],
+                         i['pose']['pose']['orientation']['z'],
+                         i['pose']['pose']['orientation']['w']]).as_euler('xyz')[2])
                     for i in gps_reader])
     trajectories = [i for i in traj_reader]
     traj_arrays = [i for i in traj_array_reader]
@@ -92,7 +108,7 @@ if __name__ == '__main__':
     ###
     # Obstacles
     ###
-    obstacle_fname = '/home/magicbycalvin/ros2_ws/src/jellyfish_search/config/obstacles.json'
+    obstacle_fname = '/home/magicbycalvin/ros2_ws/src/jellyfish_search/config/final_obs_course.json'
     with open(obstacle_fname, 'r') as f:
         obstacles = json.load(f)
 
@@ -102,16 +118,16 @@ if __name__ == '__main__':
     setRCParams()
     plt.close('all')
     fig1, ax1 = plt.subplots()
-    ax1.plot(x_err[:, 0], x_err[:, 1], label='$x_\mathrm{err}$')
-    ax1.plot(y_err[:, 0], y_err[:, 1], label='$y_\mathrm{err}$')
-    ax1.set_title('Position Tracking Error')
+    ax1.plot(gps[:, 0], gps[:, 3], label='$\psi_\mathrm{gps}$')
+    ax1.plot(t_ref, psi_ref, label='$\psi_\mathrm{ref}$')
+    ax1.set_title('Heading Angle')
     ax1.legend()
 
     fig2, ax2 = plt.subplots()
-    ax2.plot(x_ref[:, 0], x_ref[:, 1], label='$x_\mathrm{ref}$')
-    ax2.plot(y_ref[:, 0], y_ref[:, 1], label='$y_\mathrm{ref}$')
-    ax2.plot(gps[:, 0], gps[:, 1], label='$x_\mathrm{gps}$')
-    ax2.plot(gps[:, 0], gps[:, 2], label='$y_\mathrm{gps}$')
+    ax2.plot(t_ref, x_ref, label=r'$x_\mathrm{ref}$')
+    ax2.plot(t_ref, y_ref, label=r'$y_\mathrm{ref}$')
+    ax2.plot(gps[:, 0], gps[:, 1], label=r'$x_\mathrm{gps}$')
+    ax2.plot(gps[:, 0], gps[:, 2], label=r'$y_\mathrm{gps}$')
     ax2.set_ylim([-30, 100])
     ax2.set_title('Reference and GPS Positions')
     ax2.legend()

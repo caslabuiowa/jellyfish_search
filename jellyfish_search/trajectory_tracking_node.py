@@ -86,7 +86,7 @@ class TrajectoryTracker(Node):
                          data.pose.pose.orientation.y,
                          data.pose.pose.orientation.z,
                          data.pose.pose.orientation.w])
-        _, _, psi = r.as_rotvec()
+        _, _, psi = r.as_euler('xyz')
         self.pose = np.array([data.pose.pose.position.x,
                               data.pose.pose.position.y,
                               psi],
@@ -145,7 +145,7 @@ class TrajectoryTracker(Node):
             pose_ref_msg.header.frame_id = self.get_parameter('world_frame_id').value
             pose_ref_msg.pose.position.x = x_ref
             pose_ref_msg.pose.position.y = y_ref
-            r = R.from_rotvec([0.0, 0.0, psi_ref])
+            r = R.from_euler('z', psi_ref)
             q = r.as_quat()
             pose_ref_msg.pose.orientation.x = q[0]
             pose_ref_msg.pose.orientation.y = q[1]
