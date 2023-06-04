@@ -39,10 +39,10 @@ trajectory_generator:
 
 trajectory_tracker:
     ros__parameters:
-        gain_pos_p: 5.0
+        gain_pos_p: 1.0 # 5.0
         # gain_pos_i: 0.1
         # gain_pos_v: 0.0
-        gain_psi_p: 0.5
+        gain_psi_p: 1.0 # 0.5
         # gain_psi_i: 0.0
         # gain_psi_d: 0.05
         world_frame_id: 'world'
