@@ -1,0 +1,52 @@
+/**:
+    ros__parameters:
+        use_sim_time: True
+
+obstacle_detector:
+    ros__parameters:
+        # Frequency at which to publish the obstacle list (Hz), default: 10
+        obstacle_publish_frequency: 10
+        # Frame ID for the obstacles, default: 'world'
+        obstacle_frame_id: 'map'
+        obstacle_file: 'short_navigation_course_2.json'
+
+trajectory_generator:
+    ros__parameters:
+        # Maximum radius at which the vehicle can detect obstacles (m), default: 10
+        perception_radius: 30.0
+        num_workers: 10
+        num_trajectories: 300
+        maximum_speed: 10.0
+        maximum_angular_rate: 0.7853981633974483
+        trajectory_frame_id: 'odom'
+        vehicle_frame_id: 'wamv'
+        obstacle_topic: 'obstacles'
+        pose_topic: 'wamv/sensors/position/ground_truth_odometry'
+        goal_topic: 'goal'
+        rng_seed: -1
+        obstacle_position_std: 0.0
+        obstacle_size_std: 0.3
+        goal_position_std: 6.0
+        trajectory_generation_period: 10.0
+        publish_traj_array: True
+        solver_params:
+            n_steps: 300
+            tf_max: 45.0
+            Katt: 1.0
+            Krep: 1.0
+            rho_0: 100.0
+            delta: 0.3
+
+trajectory_tracker:
+    ros__parameters:
+        gain_pos_p: 2.9 # 5.0
+        # gain_pos_i: 0.1
+        # gain_pos_v: 0.0
+        gain_psi_p: 1.0 # 0.5
+        # gain_psi_i: 0.0
+        # gain_psi_d: 0.05
+        world_frame_id: 'world'
+        robot_frame_id: 'wamv'
+        odom_topic: 'wamv/sensors/position/ground_truth_odometry'
+        cmd_vel_topic: 'cmd_vel'
+        phase_unwrap_heading: True
