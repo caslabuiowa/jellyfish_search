@@ -40,7 +40,8 @@ class TrajectoryTracker(Node):
                 ('odom_topic', 'odometry'),
                 ('cmd_vel_topic', 'cmd_vel'),
                 ('world_frame_id', 'world'),
-                ('robot_frame_id', 'base_link')
+                ('robot_frame_id', 'base_link'),
+                ('phase_unwrap_heading', True)
                 ]
             )
 
@@ -67,6 +68,7 @@ class TrajectoryTracker(Node):
         self.speed = None
         self.cur_traj = None
         self.cur_traj_msg_time = 0.0
+        self.psi_last = 0.0
         self.t_last = self.get_clock().now()
         # self.x_err_int = 0.0
         # self.y_err_int = 0.0
@@ -87,6 +89,13 @@ class TrajectoryTracker(Node):
                          data.pose.pose.orientation.z,
                          data.pose.pose.orientation.w])
         _, _, psi = r.as_euler('xyz')
+
+        if self.get_parameter('phase_unwrap_heading').value:
+            if psi - self.psi_last > np.pi:
+                psi += 2*np.pi
+            elif psi - self.psi_last < np.pi:
+                psi -= 2*np.pi
+
         self.pose = np.array([data.pose.pose.position.x,
                               data.pose.pose.position.y,
                               psi],
@@ -194,7 +203,8 @@ class TrajectoryTracker(Node):
             veh_psi = self.pose[2]
             des_pos = np.array([[x_ref],
                                 [y_ref]])
-            v_cmd, w_cmd = tt_controller(veh_pos, veh_psi, des_pos, psi_ref, v_ref, w_ref, kp_pos, kp_psi)
+            # v_cmd, w_cmd = tt_controller(veh_pos, veh_psi, des_pos, psi_ref, v_ref, w_ref, kp_pos, kp_psi)
+            v_cmd, w_cmd = pf_controller(veh_pos, veh_psi, des_pos, kp_pos, kp_psi)
 
             cmd_vel_msg = TwistStamped()
             cmd_vel_msg.header.stamp = now.to_msg()
@@ -243,6 +253,17 @@ def tt_controller(veh_pos, veh_psi, des_pos, des_psi, des_v, des_w, kp, kr):
 
     v = (kp*err_pos.T + des_v*b1t.T)@b1
     w = des_w - kr*err_r
+
+    return float(v), float(w)
+
+
+def pf_controller(veh_pos, veh_psi, des_pos, kp, kr):
+    RW_I = np.array([[np.cos(veh_psi), -np.sin(veh_psi)],
+                     [np.sin(veh_psi), np.cos(veh_psi)]])
+    pos_err_w = RW_I.T@(des_pos - veh_pos)
+
+    v = kp * pos_err_w[0, 0]
+    w = kr * pos_err_w[1, 0]
 
     return float(v), float(w)
 

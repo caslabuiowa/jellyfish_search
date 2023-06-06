@@ -39,7 +39,7 @@ trajectory_generator:
 
 trajectory_tracker:
     ros__parameters:
-        gain_pos_p: 1.0 # 5.0
+        gain_pos_p: 2.9 # 5.0
         # gain_pos_i: 0.1
         # gain_pos_v: 0.0
         gain_psi_p: 1.0 # 0.5
@@ -49,3 +49,4 @@ trajectory_tracker:
         robot_frame_id: 'base_link' #'wamv'
         odom_topic: '/mavros/global_position/local' #'wamv/sensors/position/ground_truth_odometry'
         cmd_vel_topic: '/mavros/setpoint_velocity/cmd_vel'
+        phase_unwrap_heading: True

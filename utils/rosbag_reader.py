@@ -33,7 +33,7 @@ if __name__ == '__main__':
     ###
     # Trajectories
     ###
-    fname = '/home/magicbycalvin/Desktop/rosbag2_2023_06_03-20_30_43/rosbag2_2023_06_03-20_30_43_0.db3'
+    fname = '/home/magicbycalvin/Desktop/rosbag2_2023_06_05-11_15_25/rosbag2_2023_06_05-11_15_25_0.db3'
     # topics = ['/bebot_trajectory',
     #           '/bebot_trajectory_array',
     #           '/goal',
@@ -128,7 +128,7 @@ if __name__ == '__main__':
     ax2.plot(t_ref, y_ref, label=r'$y_\mathrm{ref}$')
     ax2.plot(gps[:, 0], gps[:, 1], label=r'$x_\mathrm{gps}$')
     ax2.plot(gps[:, 0], gps[:, 2], label=r'$y_\mathrm{gps}$')
-    ax2.set_ylim([-30, 100])
+    ax2.set_ylim([-30, 200])
     ax2.set_title('Reference and GPS Positions')
     ax2.legend()
 
