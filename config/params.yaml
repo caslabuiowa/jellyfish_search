@@ -8,7 +8,7 @@ obstacle_detector:
         obstacle_publish_frequency: 10
         # Frame ID for the obstacles, default: 'world'
         obstacle_frame_id: 'map'
-        obstacle_file: 'final_obs_course.json' #'short_navigation_course_2.json'
+        obstacle_file: 'better_obs_course.json' #'short_navigation_course_2.json'
 
 trajectory_generator:
     ros__parameters:
@@ -39,10 +39,10 @@ trajectory_generator:
 
 trajectory_tracker:
     ros__parameters:
-        gain_pos_p: 2.9 # 5.0
+        gain_pos_p: 0.5 # 5.0
         # gain_pos_i: 0.1
         # gain_pos_v: 0.0
-        gain_psi_p: 1.0 # 0.5
+        gain_psi_p: 0.75 # 0.5
         # gain_psi_i: 0.0
         # gain_psi_d: 0.05
         world_frame_id: 'world'
