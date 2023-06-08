@@ -33,7 +33,9 @@ if __name__ == '__main__':
     ###
     # Trajectories
     ###
-    fname = '/home/magicbycalvin/Desktop/rosbag2_2023_06_05-11_15_25/rosbag2_2023_06_05-11_15_25_0.db3'
+    fname = '/home/magicbycalvin/Desktop/rosbag2_2023_06_07-11_52_09/rosbag2_2023_06_07-11_52_09_0.db3' # Best
+    # fname = '/home/magicbycalvin/Desktop/rosbag2_2023_06_07-11_25_18/rosbag2_2023_06_07-11_25_18_0.db3' # Good
+    # fname = '/home/magicbycalvin/Desktop/rosbag2_2023_06_07-12_12_01/rosbag2_2023_06_07-12_12_01_0.db3' # Decent
     # topics = ['/bebot_trajectory',
     #           '/bebot_trajectory_array',
     #           '/goal',
@@ -108,7 +110,7 @@ if __name__ == '__main__':
     ###
     # Obstacles
     ###
-    obstacle_fname = '/home/magicbycalvin/ros2_ws/src/jellyfish_search/config/final_obs_course.json'
+    obstacle_fname = '/home/magicbycalvin/ros2_ws/src/jellyfish_search/utils/better_obs_course.json'
     with open(obstacle_fname, 'r') as f:
         obstacles = json.load(f)
 
@@ -122,13 +124,14 @@ if __name__ == '__main__':
     ax1.plot(t_ref, psi_ref, label='$\psi_\mathrm{ref}$')
     ax1.set_title('Heading Angle')
     ax1.legend()
+    ax1.set_ylim([-np.pi, np.pi])
 
     fig2, ax2 = plt.subplots()
     ax2.plot(t_ref, x_ref, label=r'$x_\mathrm{ref}$')
     ax2.plot(t_ref, y_ref, label=r'$y_\mathrm{ref}$')
     ax2.plot(gps[:, 0], gps[:, 1], label=r'$x_\mathrm{gps}$')
     ax2.plot(gps[:, 0], gps[:, 2], label=r'$y_\mathrm{gps}$')
-    ax2.set_ylim([-30, 200])
+    ax2.set_ylim([min(y_ref)-10, max(y_ref)+10])
     ax2.set_title('Reference and GPS Positions')
     ax2.legend()
 
@@ -138,7 +141,7 @@ if __name__ == '__main__':
             ax.axvspan(guided_time[0], guided_time[1], color='green', alpha=0.25)
 
     fig3, ax3 = plt.subplots()
-    ax3.plot(gps[:, 1], gps[:, 2])
+    ax3.plot(gps[:, 1], gps[:, 2], zorder=20)
     for obs in obstacles:
         ax3.add_artist(Circle(obs[:2], radius=obs[-1]))
     for traj_msg in trajectories:
@@ -147,8 +150,12 @@ if __name__ == '__main__':
     for traj_array in traj_arrays:
         for traj_msg in traj_array['trajectories']:
             traj = traj_msg_to_bern(traj_msg)
-            traj.plot(ax3, showCpts=False, color='g', alpha=0.2, lw=1)
-    ax3.set_xlim([-100, 100])
-    ax3.set_ylim([-100, 100])
+            traj.plot(ax3, showCpts=False, color='g', alpha=0.2, lw=1, zorder=1)
+
+    ax3.plot(gps[:900, 1], gps[:900, 2], c='k', zorder=25, lw=1)
+    ax3.plot(gps[900:, 1], gps[900:, 2], c='r', zorder=25, lw=1)
+    ax3.set_xlim([0, 150])
+    ax3.set_ylim([-140, -20])
+    ax3.set_aspect('equal')
 
     resetRCParams()

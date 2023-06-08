@@ -49,4 +49,4 @@ trajectory_tracker:
         robot_frame_id: 'base_link' #'wamv'
         odom_topic: '/mavros/global_position/local' #'wamv/sensors/position/ground_truth_odometry'
         cmd_vel_topic: '/mavros/setpoint_velocity/cmd_vel'
-        phase_unwrap_heading: True
+        phase_unwrap_heading: False

@@ -33,7 +33,7 @@ if __name__ == '__main__':
     ###
     # Trajectories
     ###
-    fname = '/home/magicbycalvin/ros2_ws/rosbag2_2023_06_05-22_25_38/rosbag2_2023_06_05-22_25_38_0.db3'
+    fname = '/home/magicbycalvin/ros2_ws/rosbag2_2023_06_05-22_52_41/rosbag2_2023_06_05-22_52_41_0.db3'
     # topics = ['/bebot_trajectory',
     #           '/bebot_trajectory_array',
     #           '/goal',

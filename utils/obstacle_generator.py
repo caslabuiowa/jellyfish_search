@@ -22,19 +22,27 @@ def save_obstacles(obs_positions: np.ndarray, obs_sizes: np.ndarray, fname: str)
         json.dump(obstacles, f)
 
 if __name__ == '__main__':
-    x_min = -100   # (m)
-    x_max = 100    # (m)
-    y_min = -100   # (m)
-    y_max = 100    # (m)
+    x_min = -30   # (m)
+    x_max = 200    # (m)
+    y_min = -200   # (m)
+    y_max = 30    # (m)
     obs_rad_min = 2  # (m)
-    obs_rad_max = 6  # (m)
+    obs_rad_max = 7  # (m)
 
-    rng = np.random.default_rng()
+    rng = np.random.default_rng(2)
     sampler = qmc.Sobol(d=2)
-    obs_positions = sampler.random_base2(6)
+    obs_positions = sampler.random_base2(7)
 
     obs_positions[:, 0] = obs_positions[:, 0]*(x_max - x_min) + x_min
     obs_positions[:, 1] = obs_positions[:, 1]*(y_max - y_min) + y_min
+
+    obs_tmp = []
+    for obs in obs_positions:
+        if obs[0] < 30 and obs[1] > -50:
+            pass
+        else:
+            obs_tmp.append(obs)
+    obs_positions = np.array(obs_tmp)
 
     obs_sizes = rng.integers(obs_rad_min, obs_rad_max+1, len(obs_positions))
 

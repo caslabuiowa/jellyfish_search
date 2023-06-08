@@ -93,8 +93,10 @@ class TrajectoryTracker(Node):
         if self.get_parameter('phase_unwrap_heading').value:
             if psi - self.psi_last > np.pi:
                 psi += 2*np.pi
+                self.psi_last = psi
             elif psi - self.psi_last < np.pi:
                 psi -= 2*np.pi
+                self.psi_last = psi
 
         self.pose = np.array([data.pose.pose.position.x,
                               data.pose.pose.position.y,
